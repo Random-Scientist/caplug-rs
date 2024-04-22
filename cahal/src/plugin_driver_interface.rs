@@ -1,4 +1,4 @@
-use std::{ffi::c_void, num::NonZeroU32, ptr};
+use std::{ffi::c_void, ptr};
 
 use coreaudio_sys::{
     pid_t, AudioObjectID, AudioObjectPropertyAddress, AudioServerPlugInClientInfo,
@@ -251,8 +251,3 @@ pub trait RustyAudioServerPluginInterface {}
 /*impl<T: RustyAudioServerPluginInterface> RawAudioServerPlugInDriverInterface for T {
     //blah
 }*/
-// The layout of this enum is guaranteed to == u32 due the the Option niche optimization guaranteed by the Reference
-pub enum OSResult {
-    Ok,
-    Err(NonZeroU32),
-}
