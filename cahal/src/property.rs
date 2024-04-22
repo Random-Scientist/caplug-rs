@@ -1,6 +1,5 @@
 use std::{collections::HashMap, ptr};
 
-
 use crate::{OSResult, OSStatus, OSStatusError, ResultExt};
 
 #[derive(Debug, Clone, Copy)]
@@ -8,7 +7,7 @@ pub struct PropertySelector(u32);
 
 impl From<u32> for PropertySelector {
     fn from(value: u32) -> Self {
-        Self(value);
+        Self(value)
     }
 }
 
@@ -25,8 +24,7 @@ pub unsafe trait RawProperty {
 }
 
 pub trait AudioObject {
-    fn properties(&self) -> HashMap<PropertySelector, Box<dyn RawProperty>;
-    
+    fn properties(&self) -> HashMap<PropertySelector, Box<dyn RawProperty>>;
 }
 
 /// Note that T must be FFI-safe in order for this structure to be sound
@@ -60,14 +58,14 @@ unsafe impl<T: Copy, const SEL: u32, const MUTABLE_PROP: bool> RawProperty
         MUTABLE_PROP
     }
 
-    unsafe fn set(&mut self, element: u32, data: *const u8, data_size: u32) -> OSStatus {
+    unsafe fn set(&mut self, _element: u32, data: *const u8, data_size: u32) -> OSStatus {
         assert_ne!(data, ptr::null());
         assert_eq!(data_size, self.byte_size()?);
         assert!(self.is_mut());
         todo!()
     }
 
-    unsafe fn get(&self, element: u32, data_out: *mut u8, data_len_out: *mut u32) -> OSStatus {
+    unsafe fn get(&self, _element: u32, _data_out: *mut u8, _data_len_out: *mut u32) -> OSStatus {
         todo!()
     }
 }
