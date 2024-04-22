@@ -11,43 +11,66 @@ use coreaudio_sys::{
 pub mod plugin_driver_interface;
 pub mod property;
 
-// The layout of this enum is guaranteed to == u32 due the the Option niche optimization guaranteed by the Reference
-#[derive(Debug)]
-pub enum OSResult<T> {
-    Ok(T),
-    Err(NonZeroU32),
-}
+type OSResult<T> = Result<T, OSStatusError>;
 #[derive(Debug, Clone, Copy)]
 pub struct OSStatusError(NonZeroU32);
+macro_rules! const_nonzero_u32 {
+    ($e:expr) => {{
+        const _: () = assert!($e != 0, "Tried to initialize const NonZeroU32 with 0");
+        unsafe { ::core::num::NonZeroU32::new_unchecked($e) }
+    }};
+}
 impl OSStatusError {
-    const HW_NOT_RUNNING_ERR: NonZeroU32 = kAudioHardwareNotRunningError.try_into().unwrap();
-    const HW_UNSPECIFIED_ERR: NonZeroU32 = kAudioHardwareUnspecifiedError.try_into().unwrap();
-    const HW_UNKNOWN_PROP_ERR: NonZeroU32 = kAudioHardwareUnknownPropertyError.try_into().unwrap();
-    const HW_BAD_PROPERTY_SIZE_ERR: NonZeroU32 =
-        kAudioHardwareBadPropertySizeError.try_into().unwrap();
-    const HW_ILLEGAL_OPERATION_RR: NonZeroU32 =
-        kAudioHardwareIllegalOperationError.try_into().unwrap();
-    const HW_BAD_OBJECT_ERR: NonZeroU32 = kAudioHardwareBadObjectError.try_into().unwrap();
-    const HW_BAD_DEVICE_ERR: NonZeroU32 = kAudioHardwareBadDeviceError.try_into().unwrap();
-    const HW_BAD_STREAM_ERR: NonZeroU32 = kAudioHardwareBadStreamError.try_into().unwrap();
-    const HW_UNSUPPORTED_OP: NonZeroU32 =
-        kAudioHardwareUnsupportedOperationError.try_into().unwrap();
-    const HW_NOT_READ_ERR: NonZeroU32 = kAudioHardwareNotReadyError.try_into().unwrap();
-    const DEV_UNSUPPORTED_FMT_ERR: NonZeroU32 =
-        kAudioDeviceUnsupportedFormatError.try_into().unwrap();
-    const DEV_PERMISSIONS_ERR: NonZeroU32 = kAudioDevicePermissionsError.try_into().unwrap();
+    //TODO: Future me. Make a macro for this to make it less painful
+    const HW_NOT_RUNNING_ERR: Self = Self(const_nonzero_u32!(kAudioHardwareNotRunningError));
+    const HW_UNSPECIFIED_ERR: Self = Self(const_nonzero_u32!(kAudioHardwareUnspecifiedError));
+    const HW_UNKNOWN_PROP_ERR: Self = Self(const_nonzero_u32!(kAudioHardwareUnknownPropertyError));
+    const HW_BAD_PROPERTY_SIZE_ERR: Self =
+        Self(const_nonzero_u32!(kAudioHardwareBadPropertySizeError));
+    const HW_ILLEGAL_OPERATION_ERR: Self =
+        Self(const_nonzero_u32!(kAudioHardwareIllegalOperationError));
+    const HW_BAD_OBJECT_ERR: Self = Self(const_nonzero_u32!(kAudioHardwareBadObjectError));
+    const HW_BAD_DEVICE_ERR: Self = Self(const_nonzero_u32!(kAudioHardwareBadDeviceError));
+    const HW_BAD_STREAM_ERR: Self = Self(const_nonzero_u32!(kAudioHardwareBadStreamError));
+    const HW_UNSUPPORTED_OP: Self =
+        Self(const_nonzero_u32!(kAudioHardwareUnsupportedOperationError));
+    const HW_NOT_READ_ERR: Self = Self(const_nonzero_u32!(kAudioHardwareNotReadyError));
+    const DEV_UNSUPPORTED_FMT_ERR: Self =
+        Self(const_nonzero_u32!(kAudioDeviceUnsupportedFormatError));
+    const DEV_PERMISSIONS_ERR: Self = Self(const_nonzero_u32!(kAudioDevicePermissionsError));
 }
 impl From<OSStatusError> for OSResult<()> {
     fn from(value: OSStatusError) -> Self {
-        OSResult::Err(value.0)
+        OSResult::Err(value)
     }
 }
 pub type OSStatus = OSResult<()>;
-impl OSStatus {
-    fn from_raw(val: u32) -> Self {
-        unsafe { std::mem::transmute(val) }
+
+pub trait ResultExt<T> {
+    fn replace_err<U>(self, err: U) -> Result<T, U>;
+}
+impl<T, E> ResultExt<T> for Result<T, E> {
+    fn replace_err<U>(self, err: U) -> Result<T, U> {
+        match self {
+            Ok(v) => Ok(v),
+            Err(_) => Err(err),
+        }
     }
-    fn as_raw(&self) -> u32 {
-        unsafe { std::mem::transmute(*self) }
+}
+#[cfg(test)]
+mod tests {
+    use crate::property::{RawProperty, SingularTypedProperty};
+
+    #[test]
+    fn test_property() {
+        const SEL1: u32 = 10;
+        const SEL2: u32 = 12;
+        let i = unsafe { SingularTypedProperty::<_, SEL1, true>::new(123) };
+        let i2 = unsafe { SingularTypedProperty::<_, SEL2, true>::new(123) };
+        let mut v = Vec::<Box<dyn RawProperty>>::new();
+        v.push(Box::new(i));
+        v.push(Box::new(i2));
+        assert_eq!(v.pop().unwrap().selector(), SEL2);
+        assert_eq!(v.pop().unwrap().selector(), SEL1);
     }
 }
