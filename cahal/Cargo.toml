@@ -6,5 +6,6 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+core-foundation = "0.9.4"
 coreaudio-sys = { version = "0.2.15", features = ["core_audio"] }
 strum = { version = "0.26.2", features = ["derive"] }

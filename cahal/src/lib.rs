@@ -8,8 +8,11 @@ use coreaudio_sys::{
     kAudioHardwareUnspecifiedError, kAudioHardwareUnsupportedOperationError,
 };
 
-pub mod plugin_driver_interface;
+pub mod audio_object;
+pub mod macros;
 pub mod property;
+pub mod raw_plugin_driver_interface;
+pub use coreaudio_sys as raw;
 
 type OSResult<T> = Result<T, OSStatusError>;
 #[derive(Debug, Clone, Copy)]
@@ -59,18 +62,18 @@ impl<T, E> ResultExt<T> for Result<T, E> {
 }
 #[cfg(test)]
 mod tests {
-    use crate::property::{RawProperty, SingularTypedProperty};
+    use crate::property::{Prop, RawProperty};
 
     #[test]
     fn test_property() {
         const SEL1: u32 = 10;
         const SEL2: u32 = 12;
-        let i = unsafe { SingularTypedProperty::<_, SEL1, true>::new(123) };
-        let i2 = unsafe { SingularTypedProperty::<_, SEL2, true>::new(123) };
+        let i = unsafe { Prop::<_, SEL1, true>::new(123) };
+        let i2 = unsafe { Prop::<_, SEL2, true>::new(123) };
         let mut v = Vec::<Box<dyn RawProperty>>::new();
         v.push(Box::new(i));
         v.push(Box::new(i2));
-        assert_eq!(v.pop().unwrap().selector(), SEL2);
-        assert_eq!(v.pop().unwrap().selector(), SEL1);
+        assert_eq!(v.pop().unwrap().selector(), SEL2.into());
+        assert_eq!(v.pop().unwrap().selector(), SEL1.into());
     }
 }

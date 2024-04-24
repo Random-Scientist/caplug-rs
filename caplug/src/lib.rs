@@ -1,14 +1,11 @@
-pub fn add(left: usize, right: usize) -> usize {
-    left + right
-}
+use cahal::{
+    property::Prop,
+    raw::{kAudioObjectPropertyBaseClass, kAudioObjectPropertyClass, AudioClassID},
+};
 
-#[cfg(test)]
-mod tests {
-    use super::*;
+pub struct Plugin {}
 
-    #[test]
-    fn it_works() {
-        let result = add(2, 2);
-        assert_eq!(result, 4);
-    }
+pub struct TestPluginBox {
+    base_class: Prop<AudioClassID, kAudioObjectPropertyBaseClass, false>,
+    class: Prop<AudioClassID, kAudioObjectPropertyClass, false>,
 }
