@@ -1,9 +1,9 @@
 use core::slice;
-use std::{any::Any, ffi::c_void, ptr};
-
-use core_foundation::{
-    base::{FromMutVoid, FromVoid},
-    string::CFString,
+use std::{
+    any::Any,
+    ffi::c_void,
+    ops::{Deref, DerefMut},
+    ptr,
 };
 
 use crate::{ret_assert, OSResult, OSStatus, OSStatusError, ResultExt};
@@ -41,13 +41,12 @@ pub trait RawProperty {
 }
 
 #[derive(Debug, Clone)]
-pub struct Prop<T, const SEL: u32, const MUTABLE_PROP: bool> {
-    prop: T,
-}
+/// A convenient wrapper for Copy types that implements [RawProperty] for them, given the correct selector and mutability in the const generic parameters
+pub struct Prop<T, const SEL: u32, const MUTABLE_PROP: bool>(pub T);
 
 impl<T: Copy, const SEL: u32, const MUTABLE_PROP: bool> Prop<T, SEL, MUTABLE_PROP> {
     pub fn new(val: T) -> Self {
-        Self { prop: val }
+        Self(val)
     }
 }
 //SAFETY: selector invariants and
@@ -82,7 +81,7 @@ impl<T: Copy + 'static, const SEL: u32, const MUTABLE_PROP: bool> RawProperty
 
         let val = ptr::read(data as *const T);
 
-        self.prop = val;
+        self.0 = val;
         Ok(())
     }
 
@@ -104,28 +103,47 @@ impl<T: Copy + 'static, const SEL: u32, const MUTABLE_PROP: bool> RawProperty
             data_out as usize % self.byte_size()? as usize == 0,
             OSStatusError::HW_BAD_OBJECT_ERR
         );
-        ptr::write(data_out as *mut T, self.prop.clone());
+        ptr::write(data_out as *mut T, self.0.clone());
         Ok(())
     }
 
     fn as_any(&self) -> &dyn Any {
-        &self.prop
+        &self.0
     }
 
     fn as_any_mut(&mut self) -> &mut dyn Any {
-        &mut self.prop
+        &mut self.0
     }
 }
 
 #[derive(Debug, Clone)]
+/// A convenient wrapper for an array of Copy types as a [RawProperty]
 pub struct ArrayProp<T, const SEL: u32, const MUTABLE_PROP: bool> {
     props: Vec<T>,
+}
+impl<T, const SEL: u32, const MUTABLE_PROP: bool> Deref for ArrayProp<T, SEL, MUTABLE_PROP> {
+    type Target = Vec<T>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.props
+    }
+}
+impl<T, const SEL: u32, const MUTABLE_PROP: bool> DerefMut for ArrayProp<T, SEL, MUTABLE_PROP> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.props
+    }
 }
 impl<T, const SEL: u32, const MUTABLE_PROP: bool> ArrayProp<T, SEL, MUTABLE_PROP> {
     fn item_align(&self) -> OSResult<u32> {
         std::mem::size_of::<T>()
             .try_into()
             .replace_err(OSStatusError::HW_BAD_PROPERTY_SIZE_ERR)
+    }
+    pub fn new_with(props: Vec<T>) -> Self {
+        Self { props }
+    }
+    pub fn new() -> Self {
+        Self { props: Vec::new() }
     }
 }
 

@@ -219,8 +219,8 @@ pub trait RawAudioServerPlugInDriverInterface: Sync + Send {
     ) -> OSStatus;
 }
 //no const fn in trait so this lives outside the trait for now
-const fn raw_interface<T: RawAudioServerPlugInDriverInterface>() -> AudioServerPlugInDriverInterface
-{
+pub const fn raw_interface<T: RawAudioServerPlugInDriverInterface>(
+) -> AudioServerPlugInDriverInterface {
     AudioServerPlugInDriverInterface {
         _reserved: ptr::null_mut(),
         QueryInterface: Some(T::query_interface),

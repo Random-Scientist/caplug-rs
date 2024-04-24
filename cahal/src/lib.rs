@@ -23,24 +23,26 @@ macro_rules! const_nonzero_u32 {
         unsafe { ::core::num::NonZeroU32::new_unchecked($e) }
     }};
 }
+
 impl OSStatusError {
     //TODO: Future me. Make a macro for this to make it less painful
-    const HW_NOT_RUNNING_ERR: Self = Self(const_nonzero_u32!(kAudioHardwareNotRunningError));
-    const HW_UNSPECIFIED_ERR: Self = Self(const_nonzero_u32!(kAudioHardwareUnspecifiedError));
-    const HW_UNKNOWN_PROP_ERR: Self = Self(const_nonzero_u32!(kAudioHardwareUnknownPropertyError));
-    const HW_BAD_PROPERTY_SIZE_ERR: Self =
+    pub const HW_NOT_RUNNING_ERR: Self = Self(const_nonzero_u32!(kAudioHardwareNotRunningError));
+    pub const HW_UNSPECIFIED_ERR: Self = Self(const_nonzero_u32!(kAudioHardwareUnspecifiedError));
+    pub const HW_UNKNOWN_PROP_ERR: Self =
+        Self(const_nonzero_u32!(kAudioHardwareUnknownPropertyError));
+    pub const HW_BAD_PROPERTY_SIZE_ERR: Self =
         Self(const_nonzero_u32!(kAudioHardwareBadPropertySizeError));
-    const HW_ILLEGAL_OPERATION_ERR: Self =
+    pub const HW_ILLEGAL_OPERATION_ERR: Self =
         Self(const_nonzero_u32!(kAudioHardwareIllegalOperationError));
-    const HW_BAD_OBJECT_ERR: Self = Self(const_nonzero_u32!(kAudioHardwareBadObjectError));
-    const HW_BAD_DEVICE_ERR: Self = Self(const_nonzero_u32!(kAudioHardwareBadDeviceError));
-    const HW_BAD_STREAM_ERR: Self = Self(const_nonzero_u32!(kAudioHardwareBadStreamError));
-    const HW_UNSUPPORTED_OP: Self =
+    pub const HW_BAD_OBJECT_ERR: Self = Self(const_nonzero_u32!(kAudioHardwareBadObjectError));
+    pub const HW_BAD_DEVICE_ERR: Self = Self(const_nonzero_u32!(kAudioHardwareBadDeviceError));
+    pub const HW_BAD_STREAM_ERR: Self = Self(const_nonzero_u32!(kAudioHardwareBadStreamError));
+    pub const HW_UNSUPPORTED_OP: Self =
         Self(const_nonzero_u32!(kAudioHardwareUnsupportedOperationError));
-    const HW_NOT_READ_ERR: Self = Self(const_nonzero_u32!(kAudioHardwareNotReadyError));
-    const DEV_UNSUPPORTED_FMT_ERR: Self =
+    pub const HW_NOT_READ_ERR: Self = Self(const_nonzero_u32!(kAudioHardwareNotReadyError));
+    pub const DEV_UNSUPPORTED_FMT_ERR: Self =
         Self(const_nonzero_u32!(kAudioDeviceUnsupportedFormatError));
-    const DEV_PERMISSIONS_ERR: Self = Self(const_nonzero_u32!(kAudioDevicePermissionsError));
+    pub const DEV_PERMISSIONS_ERR: Self = Self(const_nonzero_u32!(kAudioDevicePermissionsError));
 }
 impl From<OSStatusError> for OSResult<()> {
     fn from(value: OSStatusError) -> Self {
@@ -68,8 +70,8 @@ mod tests {
     fn test_property() {
         const SEL1: u32 = 10;
         const SEL2: u32 = 12;
-        let i = unsafe { Prop::<_, SEL1, true>::new(123) };
-        let i2 = unsafe { Prop::<_, SEL2, true>::new(123) };
+        let i = Prop::<_, SEL1, true>::new(123);
+        let i2 = Prop::<_, SEL2, true>::new(123);
         let mut v = Vec::<Box<dyn RawProperty>>::new();
         v.push(Box::new(i));
         v.push(Box::new(i2));
