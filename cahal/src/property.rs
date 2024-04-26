@@ -2,6 +2,7 @@ use core::slice;
 use std::{
     any::Any,
     ffi::c_void,
+    mem::{transmute, MaybeUninit},
     ops::{Deref, DerefMut},
     ptr,
 };
@@ -15,6 +16,11 @@ pub struct PropertySelector(u32);
 impl From<u32> for PropertySelector {
     fn from(value: u32) -> Self {
         Self(value)
+    }
+}
+impl From<PropertySelector> for u32 {
+    fn from(value: PropertySelector) -> Self {
+        value.0
     }
 }
 
@@ -31,7 +37,7 @@ pub trait RawProperty {
     fn as_any_mut(&mut self) -> &mut dyn Any;
     /// Read a value of the type of the property of this implementation from the `data` pointer and write it to the internal storage
     unsafe fn set(&mut self, data: *const c_void, data_size: u32) -> OSStatus;
-    /// Write a value stored in this implementation to the allocation at `data_out`
+    /// Write a value stored in this instance to the allocation at `data_out`
     unsafe fn get(
         &self,
         out_alloc_size: u32,
@@ -50,7 +56,7 @@ impl<T: Copy, const SEL: u32, const MUTABLE_PROP: bool> Prop<T, SEL, MUTABLE_PRO
     }
 }
 //SAFETY: selector invariants and
-impl<T: Copy + 'static, const SEL: u32, const MUTABLE_PROP: bool> RawProperty
+impl<T: Clone + 'static, const SEL: u32, const MUTABLE_PROP: bool> RawProperty
     for Prop<T, SEL, MUTABLE_PROP>
 {
     fn selector(&self) -> PropertySelector {
@@ -209,11 +215,13 @@ impl<T: Copy + 'static, const SEL: u32, const MUTABLE_PROP: bool> RawProperty
         );
 
         let s = slice::from_raw_parts_mut(
-            data_out as *mut T,
+            data_out as *mut MaybeUninit<T>,
             (out_alloc_size / self.item_align()?) as usize,
         );
         let to_copy = s.len().min(self.props.len());
-        s.copy_from_slice(&self.props[0..to_copy]);
+        let slice = transmute::<_, &[MaybeUninit<T>]>(&self.props[0..to_copy]);
+
+        s.copy_from_slice(slice);
 
         *data_len_out = (to_copy * self.item_align()? as usize)
             .try_into()
