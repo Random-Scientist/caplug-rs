@@ -25,18 +25,26 @@ pub trait AudioObject: HasProperties {
         None
     }
     fn get_property_mut(&mut self, sel: PropertySelector) -> Option<&mut dyn RawProperty> {
-        {
-            let prop = self.get_object_property_mut(sel);
+        if let Some(prop) = self.get_object_property_mut(sel) {
+            return Some(prop);
+        }
+        for obj in self.subobjects_mut() {
+            let prop = obj.get_property_mut(sel);
             if prop.is_some() {
                 return prop;
             }
         }
-        {
-            for obj in self.subobjects_mut() {}
-        }
-
         None
     }
+}
+fn test(r: &mut dyn AudioObject, sel: PropertySelector) -> Option<&mut dyn RawProperty> {
+    for obj in r.subobjects_mut() {
+        let prop = obj.get_property_mut(sel);
+        if prop.is_some() {
+            return prop;
+        }
+    }
+    None
 }
 pub trait HasProperties {
     fn get_object_property(&self, sel: PropertySelector) -> Option<&dyn RawProperty>;
