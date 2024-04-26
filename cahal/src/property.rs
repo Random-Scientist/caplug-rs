@@ -2,7 +2,7 @@ use core::slice;
 use std::{
     any::Any,
     ffi::c_void,
-    mem::{transmute, MaybeUninit},
+    mem::MaybeUninit,
     ops::{Deref, DerefMut},
     ptr,
 };
@@ -219,7 +219,9 @@ impl<T: Copy + 'static, const SEL: u32, const MUTABLE_PROP: bool> RawProperty
             (out_alloc_size / self.item_align()?) as usize,
         );
         let to_copy = s.len().min(self.props.len());
-        let slice = transmute::<_, &[MaybeUninit<T>]>(&self.props[0..to_copy]);
+        let slice = &self.props[0..s.len().min(self.props.len())];
+        let slice =
+            unsafe { slice::from_raw_parts(slice.as_ptr() as *const MaybeUninit<T>, slice.len()) };
 
         s.copy_from_slice(slice);
 
