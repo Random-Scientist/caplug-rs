@@ -8,4 +8,5 @@ edition = "2021"
 [dependencies]
 core-foundation = "0.9.4"
 coreaudio-sys = { version = "0.2.15", features = ["core_audio"] }
+polonius-the-crab = "0.4.1"
 strum = { version = "0.26.2", features = ["derive"] }

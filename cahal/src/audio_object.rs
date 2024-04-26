@@ -8,6 +8,7 @@ use coreaudio_sys::kAudioObjectPropertyOwnedObjects;
 use coreaudio_sys::kAudioObjectPropertyOwner;
 use coreaudio_sys::AudioClassID;
 use coreaudio_sys::AudioObjectID;
+use polonius_the_crab::{exit_polonius, polonius, polonius_return};
 
 pub trait AudioObject: HasProperties {
     fn subobjects(&self) -> &[&dyn AudioObject];
@@ -25,10 +26,17 @@ pub trait AudioObject: HasProperties {
         None
     }
     fn get_property_mut(&mut self, sel: PropertySelector) -> Option<&mut dyn RawProperty> {
-        if let Some(prop) = self.get_object_property_mut(sel) {
-            return Some(prop);
+        let mut borrow = self;
+        if let Some(prop) = polonius!(|borrow| -> Option<&'polonius mut dyn RawProperty> {
+            let opt = borrow.get_object_property_mut(sel);
+            if opt.is_some() {
+                polonius_return!(opt);
+            }
+            exit_polonius!(None)
+        }) {
+            return prop;
         }
-        for obj in self.subobjects_mut() {
+        for obj in borrow.subobjects_mut() {
             let prop = obj.get_property_mut(sel);
             if prop.is_some() {
                 return prop;
@@ -37,15 +45,7 @@ pub trait AudioObject: HasProperties {
         None
     }
 }
-fn test(r: &mut dyn AudioObject, sel: PropertySelector) -> Option<&mut dyn RawProperty> {
-    for obj in r.subobjects_mut() {
-        let prop = obj.get_property_mut(sel);
-        if prop.is_some() {
-            return prop;
-        }
-    }
-    None
-}
+
 pub trait HasProperties {
     fn get_object_property(&self, sel: PropertySelector) -> Option<&dyn RawProperty>;
     fn get_object_property_mut(&mut self, sel: PropertySelector) -> Option<&mut dyn RawProperty>;
