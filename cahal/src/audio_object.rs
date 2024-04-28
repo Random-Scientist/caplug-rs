@@ -59,6 +59,7 @@ pub struct AudioObjectBase {
     pub owned_objects: ArrayProp<AudioObjectID, kAudioObjectPropertyOwnedObjects, false>,
     pub name: Prop<CFString, kAudioObjectPropertyName, false>,
 }
+#[allow(non_upper_case_globals)]
 impl HasProperties for AudioObjectBase {
     fn get_object_property(&self, sel: PropertySelector) -> Option<&dyn RawProperty> {
         Some(match sel.into() {
