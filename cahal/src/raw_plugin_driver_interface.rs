@@ -1,13 +1,16 @@
 use std::{ffi::c_void, ptr};
 
+use core_foundation::uuid::CFUUIDRef;
 use coreaudio_sys::{
     pid_t, AudioObjectID, AudioObjectPropertyAddress, AudioServerPlugInClientInfo,
     AudioServerPlugInDriverInterface, AudioServerPlugInDriverRef, AudioServerPlugInHostRef,
-    AudioServerPlugInIOCycleInfo, CFAllocatorRef, CFDictionaryRef, CFUUIDRef, OSStatus, HRESULT,
-    LPVOID, REFIID, ULONG,
+    AudioServerPlugInIOCycleInfo, CFAllocatorRef, CFDictionaryRef, OSStatus, HRESULT, LPVOID,
+    REFIID, ULONG,
 };
 
-pub trait RawAudioServerPlugInDriverInterface: Sync + Send {
+pub trait RawAudioServerPlugInDriverInterface {
+    /// Holds the full implementation of this trait in a struct of function pointers
+    const IMPLEMENTATION: AudioServerPlugInDriverInterface = raw_interface::<Self>();
     ///	This is the CFPlugIn factory function. Its job is to create the implementation for the given
     ///	type provided that the type is supported. Because this driver is simple and all its
     ///	initialization is handled via static iniitalization when the bundle is loaded, all that
@@ -219,7 +222,7 @@ pub trait RawAudioServerPlugInDriverInterface: Sync + Send {
     ) -> OSStatus;
 }
 //no const fn in trait so this lives outside the trait for now
-pub const fn raw_interface<T: RawAudioServerPlugInDriverInterface>(
+const fn raw_interface<T: RawAudioServerPlugInDriverInterface + ?Sized>(
 ) -> AudioServerPlugInDriverInterface {
     AudioServerPlugInDriverInterface {
         _reserved: ptr::null_mut(),
