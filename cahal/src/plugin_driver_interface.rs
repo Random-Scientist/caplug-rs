@@ -11,7 +11,7 @@ use core_foundation::{
 use coreaudio_sys::{kAudioHardwareIllegalOperationError, AudioServerPlugInDriverInterface};
 
 use crate::{
-    os_err::OSStatusError,
+    os_err::{result_to_raw, OSStatusError},
     raw_plugin_driver_interface::{PluginHostInterface, RawAudioServerPlugInDriverInterface},
 };
 
