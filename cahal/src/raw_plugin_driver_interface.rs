@@ -1,4 +1,7 @@
-use std::{ffi::c_void, ptr};
+use std::{
+    ffi::c_void,
+    ptr::{self, NonNull},
+};
 
 use core_foundation::{propertylist::CFPropertyListRef, string::CFStringRef, uuid::CFUUIDRef};
 use coreaudio_sys::{
@@ -8,10 +11,7 @@ use coreaudio_sys::{
     OSStatus, HRESULT, LPVOID, REFIID, ULONG,
 };
 
-use crate::{
-    os_err::{result_from_raw, OSStatusError, ResultExt},
-    ret_assert,
-};
+use crate::os_err::{result_from_raw, OSStatusError, ResultExt};
 
 pub trait RawAudioServerPlugInDriverInterface {
     /// Holds the full implementation of this trait in a struct of function pointers
@@ -258,10 +258,15 @@ const fn raw_interface<T: RawAudioServerPlugInDriverInterface + ?Sized>(
 #[repr(C)]
 #[derive(Clone, Copy, Debug)]
 pub struct PluginHostInterface {
-    inner: *const AudioServerPlugInHostInterface,
+    inner: NonNull<AudioServerPlugInHostInterface>,
 }
 
 impl PluginHostInterface {
+    pub fn new(inner: *const AudioServerPlugInHostInterface) -> Option<Self> {
+        Some(Self {
+            inner: NonNull::new(inner.cast_mut())?,
+        })
+    }
     //TODO add doc commends from Apple headers
     pub unsafe fn properties_changed<'a>(
         &self,
@@ -269,16 +274,13 @@ impl PluginHostInterface {
         /* the lifetime required of this reference should be investigated */
         properties: &'a [AudioObjectPropertyAddress],
     ) -> crate::os_err::OSStatus {
-        ret_assert!(
-            !self.inner.is_null(),
-            OSStatusError::HW_ILLEGAL_OPERATION_ERR
-        );
-        let Some(f) = (unsafe { ptr::read(self.inner).PropertiesChanged }) else {
+        let Some(f) = (unsafe { ptr::read(self.inner.as_ptr().cast_const()).PropertiesChanged })
+        else {
             return Err(OSStatusError::HW_ILLEGAL_OPERATION_ERR);
         };
 
         result_from_raw((f)(
-            self.inner,
+            self.inner.as_ptr().cast_const(),
             in_object_id,
             properties
                 .len()
@@ -292,38 +294,37 @@ impl PluginHostInterface {
         in_key: CFStringRef,
         out_data: *mut CFPropertyListRef,
     ) -> crate::os_err::OSStatus {
-        ret_assert!(
-            !self.inner.is_null(),
-            OSStatusError::HW_ILLEGAL_OPERATION_ERR
-        );
-        let Some(f) = (unsafe { ptr::read(self.inner).CopyFromStorage }) else {
+        let Some(f) = (unsafe { ptr::read(self.inner.as_ptr().cast_const()).CopyFromStorage })
+        else {
             return Err(OSStatusError::HW_ILLEGAL_OPERATION_ERR);
         };
-        result_from_raw((f)(self.inner, in_key.cast(), out_data))
+        result_from_raw((f)(
+            self.inner.as_ptr().cast_const(),
+            in_key.cast(),
+            out_data,
+        ))
     }
     pub unsafe fn write_to_storage(
         &self,
         in_key: CFStringRef,
         in_data: CFPropertyListRef,
     ) -> crate::os_err::OSStatus {
-        ret_assert!(
-            !self.inner.is_null(),
-            OSStatusError::HW_ILLEGAL_OPERATION_ERR
-        );
-        let Some(f) = (unsafe { ptr::read(self.inner).WriteToStorage }) else {
+        let Some(f) = (unsafe { ptr::read(self.inner.as_ptr().cast_const()).WriteToStorage })
+        else {
             return Err(OSStatusError::HW_ILLEGAL_OPERATION_ERR);
         };
-        result_from_raw((f)(self.inner, in_key.cast(), in_data))
+        result_from_raw((f)(
+            self.inner.as_ptr().cast_const(),
+            in_key.cast(),
+            in_data,
+        ))
     }
     pub unsafe fn delete_from_storage(&self, in_key: CFStringRef) -> crate::os_err::OSStatus {
-        ret_assert!(
-            !self.inner.is_null(),
-            OSStatusError::HW_ILLEGAL_OPERATION_ERR
-        );
-        let Some(f) = (unsafe { ptr::read(self.inner).DeleteFromStorage }) else {
+        let Some(f) = (unsafe { ptr::read(self.inner.as_ptr().cast_const()).DeleteFromStorage })
+        else {
             return Err(OSStatusError::HW_ILLEGAL_OPERATION_ERR);
         };
-        result_from_raw((f)(self.inner, in_key.cast()))
+        result_from_raw((f)(self.inner.as_ptr().cast_const(), in_key.cast()))
     }
     pub unsafe fn request_device_configuration_change(
         &self,
@@ -331,16 +332,14 @@ impl PluginHostInterface {
         in_change_action: u64,
         in_change_info: *mut c_void,
     ) -> crate::os_err::OSStatus {
-        ret_assert!(
-            !self.inner.is_null(),
-            OSStatusError::HW_ILLEGAL_OPERATION_ERR
-        );
-        let Some(f) = (unsafe { ptr::read(self.inner).RequestDeviceConfigurationChange }) else {
+        let Some(f) = (unsafe {
+            ptr::read(self.inner.as_ptr().cast_const()).RequestDeviceConfigurationChange
+        }) else {
             return Err(OSStatusError::HW_ILLEGAL_OPERATION_ERR);
         };
 
         result_from_raw((f)(
-            self.inner,
+            self.inner.as_ptr().cast_const(),
             in_device_object_id,
             in_change_action,
             in_change_info,

@@ -27,6 +27,12 @@ pub mod os_err {
             Ok(())
         }
     }
+    pub fn result_to_raw(value: OSStatus) -> i32 {
+        match value {
+            Ok(()) => 0,
+            Err(n) => n.0.get() as i32,
+        }
+    }
     #[derive(Debug, Clone, Copy)]
     #[repr(transparent)]
     pub struct OSStatusError(NonZeroU32);

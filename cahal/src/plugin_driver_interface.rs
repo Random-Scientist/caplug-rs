@@ -8,25 +8,36 @@ use core_foundation::{
     base::{kCFAllocatorDefault, CFAllocatorRef, CFEqual},
     uuid::{CFUUIDCreateFromUUIDBytes, CFUUIDGetConstantUUIDWithBytes, CFUUIDRef},
 };
-use coreaudio_sys::{
-    kAudioHardwareIllegalOperationError, AudioServerPlugInDriverInterface,
-    AudioServerPlugInHostInterface,
-};
+use coreaudio_sys::{kAudioHardwareIllegalOperationError, AudioServerPlugInDriverInterface};
 
-use crate::raw_plugin_driver_interface::RawAudioServerPlugInDriverInterface;
+use crate::{
+    os_err::{result_to_raw, OSStatusError},
+    raw_plugin_driver_interface::{PluginHostInterface, RawAudioServerPlugInDriverInterface},
+};
 
 pub trait AudioServerPluginDriverInterface {
     fn create(cf_allocator: CFAllocatorRef) -> Self;
-    fn init(&self, host: &AudioServerPlugInHostInterface) -> crate::os_err::OSStatus;
+    fn init(&self, host: PluginHostInterface) -> crate::os_err::OSStatus;
 }
 
 #[repr(C)]
 pub struct PluginDriverImplementation<T> {
     implementation: *const AudioServerPlugInDriverInterface,
     refcount: AtomicU32,
-    data: T,
+    driver: T,
 }
-
+macro_rules! validate_impl_ref {
+    ($e:expr) => {
+        if $e.is_null() {
+            return ::coreaudio_sys::kAudioHardwareIllegalOperationError as i32;
+        } else {
+            let Some(f) = $e.cast::<PluginDriverImplementation<Self>>().as_ref() else {
+                return ::coreaudio_sys::kAudioHardwareIllegalOperationError as i32;
+            };
+            f
+        }
+    };
+}
 impl<Implementation> RawAudioServerPlugInDriverInterface for Implementation
 where
     Implementation: Sync + AudioServerPluginDriverInterface,
@@ -50,7 +61,7 @@ where
             Box::<_>::into_raw(Box::new(PluginDriverImplementation {
                 implementation: impl_borrow as *const AudioServerPlugInDriverInterface,
                 refcount: AtomicU32::new(1),
-                data: driver_state,
+                driver: driver_state,
             }))
             .cast()
         } else {
@@ -120,7 +131,11 @@ where
         driver: coreaudio_sys::AudioServerPlugInDriverRef,
         host: coreaudio_sys::AudioServerPlugInHostRef,
     ) -> coreaudio_sys::OSStatus {
-        todo!()
+        let Some(hostref) = PluginHostInterface::new(host) else {
+            return kAudioHardwareIllegalOperationError as i32;
+        };
+        let implementation = validate_impl_ref!(driver);
+        return result_to_raw(implementation.driver.init(hostref));
     }
 
     unsafe extern "C" fn create_device(
