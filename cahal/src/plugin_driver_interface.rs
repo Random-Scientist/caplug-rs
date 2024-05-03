@@ -16,9 +16,10 @@ use coreaudio_sys::{
 use crate::raw_plugin_driver_interface::RawAudioServerPlugInDriverInterface;
 
 pub trait AudioServerPluginDriverInterface {
-    fn new(cf_allocator: CFAllocatorRef) -> Self;
-    fn init(&self, host: &AudioServerPlugInHostInterface) -> crate::OSStatus;
+    fn create(cf_allocator: CFAllocatorRef) -> Self;
+    fn init(&self, host: &AudioServerPlugInHostInterface) -> crate::os_err::OSStatus;
 }
+
 #[repr(C)]
 pub struct PluginDriverImplementation<T> {
     implementation: *const AudioServerPlugInDriverInterface,
@@ -41,7 +42,7 @@ where
             ) == 1
         } {
             //Init and allocate driver
-            let driver_state = Implementation::new(alloc.cast());
+            let driver_state = Implementation::create(alloc.cast());
 
             //explicitly borrow IMPLEMENTATION for 'static (to ensure that it gets promoted to a static)
             let impl_borrow: &'static AudioServerPlugInDriverInterface = &Self::IMPLEMENTATION;

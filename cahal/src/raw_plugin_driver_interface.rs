@@ -1,11 +1,16 @@
 use std::{ffi::c_void, ptr};
 
-use core_foundation::uuid::CFUUIDRef;
+use core_foundation::{propertylist::CFPropertyListRef, string::CFStringRef, uuid::CFUUIDRef};
 use coreaudio_sys::{
     pid_t, AudioObjectID, AudioObjectPropertyAddress, AudioServerPlugInClientInfo,
-    AudioServerPlugInDriverInterface, AudioServerPlugInDriverRef, AudioServerPlugInHostRef,
-    AudioServerPlugInIOCycleInfo, CFAllocatorRef, CFDictionaryRef, OSStatus, HRESULT, LPVOID,
-    REFIID, ULONG,
+    AudioServerPlugInDriverInterface, AudioServerPlugInDriverRef, AudioServerPlugInHostInterface,
+    AudioServerPlugInHostRef, AudioServerPlugInIOCycleInfo, CFAllocatorRef, CFDictionaryRef,
+    OSStatus, HRESULT, LPVOID, REFIID, ULONG,
+};
+
+use crate::{
+    os_err::{result_from_raw, OSStatusError, ResultExt},
+    ret_assert,
 };
 
 pub trait RawAudioServerPlugInDriverInterface {
@@ -250,7 +255,95 @@ const fn raw_interface<T: RawAudioServerPlugInDriverInterface + ?Sized>(
         EndIOOperation: Some(T::end_io_operation),
     }
 }
-pub trait RustyAudioServerPluginInterface {}
-/*impl<T: RustyAudioServerPluginInterface> RawAudioServerPlugInDriverInterface for T {
-    //blah
-}*/
+#[repr(C)]
+#[derive(Clone, Copy, Debug)]
+pub struct PluginHostInterface {
+    inner: *const AudioServerPlugInHostInterface,
+}
+
+impl PluginHostInterface {
+    //TODO add doc commends from Apple headers
+    pub unsafe fn properties_changed<'a>(
+        &self,
+        in_object_id: AudioObjectID,
+        /* the lifetime required of this reference should be investigated */
+        properties: &'a [AudioObjectPropertyAddress],
+    ) -> crate::os_err::OSStatus {
+        ret_assert!(
+            !self.inner.is_null(),
+            OSStatusError::HW_ILLEGAL_OPERATION_ERR
+        );
+        let Some(f) = (unsafe { ptr::read(self.inner).PropertiesChanged }) else {
+            return Err(OSStatusError::HW_ILLEGAL_OPERATION_ERR);
+        };
+
+        result_from_raw((f)(
+            self.inner,
+            in_object_id,
+            properties
+                .len()
+                .try_into()
+                .replace_err(OSStatusError::HW_BAD_PROPERTY_SIZE_ERR)?,
+            properties.as_ptr(),
+        ))
+    }
+    pub unsafe fn copy_from_storage(
+        &self,
+        in_key: CFStringRef,
+        out_data: *mut CFPropertyListRef,
+    ) -> crate::os_err::OSStatus {
+        ret_assert!(
+            !self.inner.is_null(),
+            OSStatusError::HW_ILLEGAL_OPERATION_ERR
+        );
+        let Some(f) = (unsafe { ptr::read(self.inner).CopyFromStorage }) else {
+            return Err(OSStatusError::HW_ILLEGAL_OPERATION_ERR);
+        };
+        result_from_raw((f)(self.inner, in_key.cast(), out_data))
+    }
+    pub unsafe fn write_to_storage(
+        &self,
+        in_key: CFStringRef,
+        in_data: CFPropertyListRef,
+    ) -> crate::os_err::OSStatus {
+        ret_assert!(
+            !self.inner.is_null(),
+            OSStatusError::HW_ILLEGAL_OPERATION_ERR
+        );
+        let Some(f) = (unsafe { ptr::read(self.inner).WriteToStorage }) else {
+            return Err(OSStatusError::HW_ILLEGAL_OPERATION_ERR);
+        };
+        result_from_raw((f)(self.inner, in_key.cast(), in_data))
+    }
+    pub unsafe fn delete_from_storage(&self, in_key: CFStringRef) -> crate::os_err::OSStatus {
+        ret_assert!(
+            !self.inner.is_null(),
+            OSStatusError::HW_ILLEGAL_OPERATION_ERR
+        );
+        let Some(f) = (unsafe { ptr::read(self.inner).DeleteFromStorage }) else {
+            return Err(OSStatusError::HW_ILLEGAL_OPERATION_ERR);
+        };
+        result_from_raw((f)(self.inner, in_key.cast()))
+    }
+    pub unsafe fn request_device_configuration_change(
+        &self,
+        in_device_object_id: AudioObjectID,
+        in_change_action: u64,
+        in_change_info: *mut c_void,
+    ) -> crate::os_err::OSStatus {
+        ret_assert!(
+            !self.inner.is_null(),
+            OSStatusError::HW_ILLEGAL_OPERATION_ERR
+        );
+        let Some(f) = (unsafe { ptr::read(self.inner).RequestDeviceConfigurationChange }) else {
+            return Err(OSStatusError::HW_ILLEGAL_OPERATION_ERR);
+        };
+
+        result_from_raw((f)(
+            self.inner,
+            in_device_object_id,
+            in_change_action,
+            in_change_info,
+        ))
+    }
+}

@@ -7,7 +7,10 @@ use std::{
     ptr,
 };
 
-use crate::{ret_assert, OSResult, OSStatus, OSStatusError, ResultExt};
+use crate::{
+    os_err::{OSResult, OSStatus, OSStatusError, ResultExt},
+    ret_assert,
+};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[repr(transparent)]
