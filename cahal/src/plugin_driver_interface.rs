@@ -27,16 +27,12 @@ pub struct PluginDriverImplementation<T> {
     driver: T,
 }
 macro_rules! validate_impl_ref {
-    ($e:expr) => {
-        if $e.is_null() {
+    ($e:expr) => {{
+        let Some(f) = $e.cast::<PluginDriverImplementation<Self>>().as_ref() else {
             return ::coreaudio_sys::kAudioHardwareIllegalOperationError as i32;
-        } else {
-            let Some(f) = $e.cast::<PluginDriverImplementation<Self>>().as_ref() else {
-                return ::coreaudio_sys::kAudioHardwareIllegalOperationError as i32;
-            };
-            f
-        }
-    };
+        };
+        f
+    }};
 }
 impl<Implementation> RawAudioServerPlugInDriverInterface for Implementation
 where
