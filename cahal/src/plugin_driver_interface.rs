@@ -1,9 +1,3 @@
-use std::{
-    mem::transmute,
-    ptr,
-    sync::atomic::{AtomicU32, Ordering},
-};
-
 use core_foundation::{
     base::{kCFAllocatorDefault, CFAllocatorRef, CFEqual},
     uuid::{CFUUIDCreateFromUUIDBytes, CFUUIDGetConstantUUIDWithBytes, CFUUIDRef},
@@ -12,10 +6,17 @@ use coreaudio_sys::{
     kAudioHardwareIllegalOperationError, AudioServerPlugInDriverInterface,
     AudioServerPlugInHostInterface,
 };
+use log::{trace, warn};
+use std::{
+    mem::transmute,
+    ptr,
+    sync::atomic::{AtomicU32, Ordering},
+};
 
 use crate::raw_plugin_driver_interface::RawAudioServerPlugInDriverInterface;
 
 pub trait AudioServerPluginDriverInterface {
+    const NAME: &'static str;
     fn new(cf_allocator: CFAllocatorRef) -> Self;
     fn init(&self, host: &AudioServerPlugInHostInterface) -> crate::OSStatus;
 }
@@ -23,17 +24,34 @@ pub trait AudioServerPluginDriverInterface {
 pub struct PluginDriverImplementation<T> {
     implementation: *const AudioServerPlugInDriverInterface,
     refcount: AtomicU32,
-    data: T,
+    state: T,
 }
 
 impl<Implementation> RawAudioServerPlugInDriverInterface for Implementation
 where
     Implementation: Sync + AudioServerPluginDriverInterface,
 {
+    const NAME: &'static str = Self::NAME;
     unsafe extern "C" fn create(
         alloc: coreaudio_sys::CFAllocatorRef,
         requested_uuid: CFUUIDRef,
     ) -> *mut std::ffi::c_void {
+        let mut logger = oslog::OsLogger::new(&format!("com.rustaudio.{}", Self::NAME));
+
+        #[cfg(not(debug_assertions))]
+        {
+            logger = logger.level_filter(log::LevelFilter::Error);
+        }
+        #[cfg(debug_assertions)]
+        {
+            logger = logger.level_filter(log::LevelFilter::Trace);
+        }
+
+        let Ok(()) = logger.init() else {
+            panic!("failed to initialize logger from Rust CoreAudio Driver");
+        };
+
+        trace!("Driver Plugin Driver Constructor: {}", Self::NAME);
         if unsafe {
             CFEqual(
                 requested_uuid.cast(),
@@ -49,7 +67,7 @@ where
             Box::<_>::into_raw(Box::new(PluginDriverImplementation {
                 implementation: impl_borrow as *const AudioServerPlugInDriverInterface,
                 refcount: AtomicU32::new(1),
-                data: driver_state,
+                state: driver_state,
             }))
             .cast()
         } else {
@@ -62,6 +80,7 @@ where
         in_uuid: coreaudio_sys::REFIID,
         out_interface: *mut coreaudio_sys::LPVOID,
     ) -> coreaudio_sys::HRESULT {
+        trace!("Driver Plugin Driver Interface queried: {}", Self::NAME);
         if out_interface.is_null() {
             return kAudioHardwareIllegalOperationError as i32;
         }
@@ -77,10 +96,12 @@ where
             ) == 1
                 || CFEqual(requested_uuid.cast(), get_i_unknown_interface_uuid().cast()) == 1
         } {
+            trace!("query interface matched");
             unsafe { ptr::write(out_interface, driver) }
             //HRESULT ok
             return 0;
         }
+        warn!("E_NOINTERFACE returned from query_interface");
         // E_NOINTERFACE, CFPlugInCOM.h
         return 0x80000004u32 as i32;
     }
@@ -92,6 +113,7 @@ where
         };
         // Add the reference we added
         let prev_count = r.refcount.fetch_add(1, Ordering::SeqCst);
+        trace!("retain called, new refcount: {}", prev_count + 1);
         //Pointer is non-null, refcount is 0
         if prev_count == 0 {
             0
@@ -108,17 +130,21 @@ where
             return 0;
         };
 
-        r.refcount
+        let ret = r
+            .refcount
             .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |val| {
                 Some(val.saturating_sub(1))
             })
             .unwrap()
-            .saturating_sub(1)
+            .saturating_sub(1);
+        trace!("release called, new refcount: {}", ret);
+        ret
     }
     unsafe extern "C" fn initialize(
         driver: coreaudio_sys::AudioServerPlugInDriverRef,
         host: coreaudio_sys::AudioServerPlugInHostRef,
     ) -> coreaudio_sys::OSStatus {
+        trace!("Initialize called: {}", Self::NAME);
         todo!()
     }
 

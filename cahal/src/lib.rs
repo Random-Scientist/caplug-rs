@@ -13,6 +13,7 @@ pub mod macros;
 pub mod plugin_driver_interface;
 pub mod property;
 pub mod raw_plugin_driver_interface;
+pub use core_foundation;
 pub use coreaudio_sys as raw;
 
 type OSResult<T> = Result<T, OSStatusError>;

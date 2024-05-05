@@ -10,7 +10,32 @@ use coreaudio_sys::{
 
 pub trait RawAudioServerPlugInDriverInterface {
     /// Holds the full implementation of this trait in a struct of function pointers
-    const IMPLEMENTATION: AudioServerPlugInDriverInterface = raw_interface::<Self>();
+    const IMPLEMENTATION: AudioServerPlugInDriverInterface = AudioServerPlugInDriverInterface {
+        _reserved: ptr::null_mut(),
+        QueryInterface: Some(Self::query_interface),
+        AddRef: Some(Self::retain),
+        Release: Some(Self::release),
+        Initialize: Some(Self::initialize),
+        CreateDevice: Some(Self::create_device),
+        DestroyDevice: Some(Self::destroy_device),
+        AddDeviceClient: Some(Self::add_device_client),
+        RemoveDeviceClient: Some(Self::remove_device_client),
+        PerformDeviceConfigurationChange: Some(Self::perform_device_configuration_change),
+        AbortDeviceConfigurationChange: Some(Self::abort_device_configuration_change),
+        HasProperty: Some(Self::has_property),
+        IsPropertySettable: Some(Self::is_property_settable),
+        GetPropertyDataSize: Some(Self::get_property_data_size),
+        GetPropertyData: Some(Self::get_property_data),
+        SetPropertyData: Some(Self::set_property_data),
+        StartIO: Some(Self::start_io),
+        StopIO: Some(Self::stop_io),
+        GetZeroTimeStamp: Some(Self::get_zero_time_stamp),
+        WillDoIOOperation: Some(Self::will_do_io_operation),
+        BeginIOOperation: Some(Self::begin_io_operation),
+        DoIOOperation: Some(Self::do_io_operation),
+        EndIOOperation: Some(Self::end_io_operation),
+    };
+    const NAME: &'static str;
     ///	This is the CFPlugIn factory function. Its job is to create the implementation for the given
     ///	type provided that the type is supported. Because this driver is simple and all its
     ///	initialization is handled via static iniitalization when the bundle is loaded, all that
@@ -221,36 +246,3 @@ pub trait RawAudioServerPlugInDriverInterface {
         io_cycle_info: *const AudioServerPlugInIOCycleInfo,
     ) -> OSStatus;
 }
-//no const fn in trait so this lives outside the trait for now
-const fn raw_interface<T: RawAudioServerPlugInDriverInterface + ?Sized>(
-) -> AudioServerPlugInDriverInterface {
-    AudioServerPlugInDriverInterface {
-        _reserved: ptr::null_mut(),
-        QueryInterface: Some(T::query_interface),
-        AddRef: Some(T::retain),
-        Release: Some(T::release),
-        Initialize: Some(T::initialize),
-        CreateDevice: Some(T::create_device),
-        DestroyDevice: Some(T::destroy_device),
-        AddDeviceClient: Some(T::add_device_client),
-        RemoveDeviceClient: Some(T::remove_device_client),
-        PerformDeviceConfigurationChange: Some(T::perform_device_configuration_change),
-        AbortDeviceConfigurationChange: Some(T::abort_device_configuration_change),
-        HasProperty: Some(T::has_property),
-        IsPropertySettable: Some(T::is_property_settable),
-        GetPropertyDataSize: Some(T::get_property_data_size),
-        GetPropertyData: Some(T::get_property_data),
-        SetPropertyData: Some(T::set_property_data),
-        StartIO: Some(T::start_io),
-        StopIO: Some(T::stop_io),
-        GetZeroTimeStamp: Some(T::get_zero_time_stamp),
-        WillDoIOOperation: Some(T::will_do_io_operation),
-        BeginIOOperation: Some(T::begin_io_operation),
-        DoIOOperation: Some(T::do_io_operation),
-        EndIOOperation: Some(T::end_io_operation),
-    }
-}
-pub trait RustyAudioServerPluginInterface {}
-/*impl<T: RustyAudioServerPluginInterface> RawAudioServerPlugInDriverInterface for T {
-    //blah
-}*/
