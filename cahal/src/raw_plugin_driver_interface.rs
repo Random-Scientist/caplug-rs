@@ -1,12 +1,17 @@
-use std::{ffi::c_void, ptr};
+use std::{
+    ffi::c_void,
+    ptr::{self, NonNull},
+};
 
-use core_foundation::uuid::CFUUIDRef;
+use core_foundation::{propertylist::CFPropertyListRef, string::CFStringRef, uuid::CFUUIDRef};
 use coreaudio_sys::{
     pid_t, AudioObjectID, AudioObjectPropertyAddress, AudioServerPlugInClientInfo,
-    AudioServerPlugInDriverInterface, AudioServerPlugInDriverRef, AudioServerPlugInHostRef,
-    AudioServerPlugInIOCycleInfo, CFAllocatorRef, CFDictionaryRef, OSStatus, HRESULT, LPVOID,
-    REFIID, ULONG,
+    AudioServerPlugInDriverInterface, AudioServerPlugInDriverRef, AudioServerPlugInHostInterface,
+    AudioServerPlugInHostRef, AudioServerPlugInIOCycleInfo, CFAllocatorRef, CFDictionaryRef,
+    OSStatus, HRESULT, LPVOID, REFIID, ULONG,
 };
+
+use crate::os_err::{result_from_raw, OSStatusError, ResultExt};
 
 pub trait RawAudioServerPlugInDriverInterface {
     /// Holds the full implementation of this trait in a struct of function pointers

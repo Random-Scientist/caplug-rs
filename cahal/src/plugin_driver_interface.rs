@@ -13,20 +13,31 @@ use std::{
     sync::atomic::{AtomicU32, Ordering},
 };
 
-use crate::raw_plugin_driver_interface::RawAudioServerPlugInDriverInterface;
+use crate::{
+    os_err::{result_to_raw, OSStatusError},
+    raw_plugin_driver_interface::{PluginHostInterface, RawAudioServerPlugInDriverInterface},
+};
 
 pub trait AudioServerPluginDriverInterface {
     const NAME: &'static str;
-    fn new(cf_allocator: CFAllocatorRef) -> Self;
-    fn init(&self, host: &AudioServerPlugInHostInterface) -> crate::OSStatus;
+    fn create(cf_allocator: CFAllocatorRef) -> Self;
+    fn init(&self, host: PluginHostInterface) -> crate::os_err::OSStatus;
 }
+
 #[repr(C)]
 pub struct PluginDriverImplementation<T> {
     implementation: *const AudioServerPlugInDriverInterface,
     refcount: AtomicU32,
     state: T,
 }
-
+macro_rules! validate_impl_ref {
+    ($e:expr) => {{
+        let Some(f) = $e.cast::<PluginDriverImplementation<Self>>().as_ref() else {
+            return ::coreaudio_sys::kAudioHardwareIllegalOperationError as i32;
+        };
+        f
+    }};
+}
 impl<Implementation> RawAudioServerPlugInDriverInterface for Implementation
 where
     Implementation: Sync + AudioServerPluginDriverInterface,
@@ -59,7 +70,7 @@ where
             ) == 1
         } {
             //Init and allocate driver
-            let driver_state = Implementation::new(alloc.cast());
+            let driver_state = Implementation::create(alloc.cast());
 
             //explicitly borrow IMPLEMENTATION for 'static (to ensure that it gets promoted to a static)
             let impl_borrow: &'static AudioServerPlugInDriverInterface = &Self::IMPLEMENTATION;
@@ -145,7 +156,11 @@ where
         host: coreaudio_sys::AudioServerPlugInHostRef,
     ) -> coreaudio_sys::OSStatus {
         trace!("Initialize called: {}", Self::NAME);
-        todo!()
+        let Some(hostref) = PluginHostInterface::new(host) else {
+            return kAudioHardwareIllegalOperationError as i32;
+        };
+        let implementation = validate_impl_ref!(driver);
+        return result_to_raw(implementation.driver.init(hostref));
     }
 
     unsafe extern "C" fn create_device(
