@@ -1,3 +1,0 @@
-[workspace]
-members = ["cahal", "caplug"]
-resolver = "2"

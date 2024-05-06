@@ -45,7 +45,7 @@ where
     const NAME: &'static str = Self::NAME;
     unsafe extern "C" fn create(
         alloc: coreaudio_sys::CFAllocatorRef,
-        requested_uuid: CFUUIDRef,
+        requested_uuid: crate::base::CFUUIDRef,
     ) -> *mut std::ffi::c_void {
         let mut logger = oslog::OsLogger::new(&format!("com.rustaudio.{}", Self::NAME));
 
@@ -160,7 +160,7 @@ where
             return kAudioHardwareIllegalOperationError as i32;
         };
         let implementation = validate_impl_ref!(driver);
-        return result_to_raw(implementation.driver.init(hostref));
+        return result_to_raw(implementation.state.init(hostref));
     }
 
     unsafe extern "C" fn create_device(

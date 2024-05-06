@@ -1,0 +1,2 @@
+[alias]
+build_driver = "run --package build_driver"

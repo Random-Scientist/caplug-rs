@@ -4,7 +4,7 @@ pub mod plugin_driver_interface;
 pub mod property;
 pub mod raw_plugin_driver_interface;
 pub use core_foundation;
-pub use coreaudio_sys as raw;
+pub use coreaudio_sys as base;
 
 pub mod os_err {
     use std::num::NonZeroU32;

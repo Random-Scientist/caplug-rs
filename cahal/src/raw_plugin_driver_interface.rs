@@ -49,7 +49,10 @@ pub trait RawAudioServerPlugInDriverInterface {
     ///	the IUnknown methods that are used to discover that actual interface to talk to the driver.
     ///	The majority of the driver's initilization should be handled in the Initialize() method of
     ///	the driver's AudioServerPlugInDriverInterface.
-    unsafe extern "C" fn create(alloc: CFAllocatorRef, requested_uuid: CFUUIDRef) -> *mut c_void;
+    unsafe extern "C" fn create(
+        alloc: CFAllocatorRef,
+        requested_uuid: crate::base::CFUUIDRef,
+    ) -> *mut c_void;
 
     ///	This function is called by the HAL to get the interface to talk to the plug-in through.
     ///	AudioServerPlugIns are required to support the IUnknown interface and the
@@ -250,4 +253,96 @@ pub trait RawAudioServerPlugInDriverInterface {
         io_buffer_frame_size: u32,
         io_cycle_info: *const AudioServerPlugInIOCycleInfo,
     ) -> OSStatus;
+}
+
+#[repr(C)]
+#[derive(Clone, Copy, Debug)]
+pub struct PluginHostInterface {
+    inner: NonNull<AudioServerPlugInHostInterface>,
+}
+
+impl PluginHostInterface {
+    pub fn new(inner: *const AudioServerPlugInHostInterface) -> Option<Self> {
+        Some(Self {
+            inner: NonNull::new(inner.cast_mut())?,
+        })
+    }
+    //TODO add doc commends from Apple headers
+    pub unsafe fn properties_changed<'a>(
+        &self,
+        in_object_id: AudioObjectID,
+        /* the lifetime required of this reference should be investigated */
+        properties: &'a [AudioObjectPropertyAddress],
+    ) -> crate::os_err::OSStatus {
+        let Some(f) = (unsafe { ptr::read(self.inner.as_ptr().cast_const()).PropertiesChanged })
+        else {
+            return Err(OSStatusError::HW_ILLEGAL_OPERATION_ERR);
+        };
+
+        result_from_raw((f)(
+            self.inner.as_ptr().cast_const(),
+            in_object_id,
+            properties
+                .len()
+                .try_into()
+                .replace_err(OSStatusError::HW_BAD_PROPERTY_SIZE_ERR)?,
+            properties.as_ptr(),
+        ))
+    }
+    pub unsafe fn copy_from_storage(
+        &self,
+        in_key: CFStringRef,
+        out_data: *mut CFPropertyListRef,
+    ) -> crate::os_err::OSStatus {
+        let Some(f) = (unsafe { ptr::read(self.inner.as_ptr().cast_const()).CopyFromStorage })
+        else {
+            return Err(OSStatusError::HW_ILLEGAL_OPERATION_ERR);
+        };
+        result_from_raw((f)(
+            self.inner.as_ptr().cast_const(),
+            in_key.cast(),
+            out_data,
+        ))
+    }
+    pub unsafe fn write_to_storage(
+        &self,
+        in_key: CFStringRef,
+        in_data: CFPropertyListRef,
+    ) -> crate::os_err::OSStatus {
+        let Some(f) = (unsafe { ptr::read(self.inner.as_ptr().cast_const()).WriteToStorage })
+        else {
+            return Err(OSStatusError::HW_ILLEGAL_OPERATION_ERR);
+        };
+        result_from_raw((f)(
+            self.inner.as_ptr().cast_const(),
+            in_key.cast(),
+            in_data,
+        ))
+    }
+    pub unsafe fn delete_from_storage(&self, in_key: CFStringRef) -> crate::os_err::OSStatus {
+        let Some(f) = (unsafe { ptr::read(self.inner.as_ptr().cast_const()).DeleteFromStorage })
+        else {
+            return Err(OSStatusError::HW_ILLEGAL_OPERATION_ERR);
+        };
+        result_from_raw((f)(self.inner.as_ptr().cast_const(), in_key.cast()))
+    }
+    pub unsafe fn request_device_configuration_change(
+        &self,
+        in_device_object_id: AudioObjectID,
+        in_change_action: u64,
+        in_change_info: *mut c_void,
+    ) -> crate::os_err::OSStatus {
+        let Some(f) = (unsafe {
+            ptr::read(self.inner.as_ptr().cast_const()).RequestDeviceConfigurationChange
+        }) else {
+            return Err(OSStatusError::HW_ILLEGAL_OPERATION_ERR);
+        };
+
+        result_from_raw((f)(
+            self.inner.as_ptr().cast_const(),
+            in_device_object_id,
+            in_change_action,
+            in_change_info,
+        ))
+    }
 }

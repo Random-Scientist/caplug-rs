@@ -18,3 +18,13 @@ macro_rules! const_nonzero_u32 {
         unsafe { ::core::num::NonZeroU32::new_unchecked($e) }
     }};
 }
+/// Creates the necessary CFPlugin entry point function (named "__audio_driver_entry")
+#[macro_export]
+macro_rules! entry_point {
+    ($t:ty) => {
+        #[no_mangle]
+        pub unsafe extern "C" fn __audio_driver_entry(alloc: ::cahal::base::CFAllocatorRef, requested_uuid: ::cahal::base::CFUUIDRef) -> *mut ::std::ffi::c_void {
+            <$t as ::cahal::raw_plugin_driver_interface::RawAudioServerPlugInDriverInterface>::create(alloc, requested_uuid)
+        }
+    };
+}
