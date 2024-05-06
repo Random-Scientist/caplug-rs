@@ -23,7 +23,7 @@ macro_rules! const_nonzero_u32 {
 macro_rules! entry_point {
     ($t:ty) => {
         #[no_mangle]
-        pub unsafe extern "C" fn create_driver(alloc: ::cahal::base::CFAllocatorRef, requested_uuid: ::cahal::base::CFUUIDRef) -> *mut ::std::ffi::c_void {
+        pub unsafe extern "C" fn __create_driver(alloc: ::cahal::base::CFAllocatorRef, requested_uuid: ::cahal::base::CFUUIDRef) -> *mut ::std::ffi::c_void {
             <$t as ::cahal::raw_plugin_driver_interface::RawAudioServerPlugInDriverInterface>::create(alloc, requested_uuid)
         }
     };

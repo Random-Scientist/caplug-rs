@@ -156,7 +156,7 @@ fn make_info_plist(package_name: &str, package_version: &str) -> String {
 	<key>CFPlugInFactories</key>
 	<dict>
 		<key>{}</key>
-		<string>create_driver</string>
+		<string>__create_driver</string>
 	</dict>
 	<key>CFPlugInTypes</key>
 	<dict>
