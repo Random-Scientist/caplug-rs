@@ -1,8 +1,6 @@
 use std::{
-    collections::HashMap,
     env::current_dir,
     fs::{copy, create_dir, create_dir_all, read_to_string, File},
-    hash::{Hasher, SipHasher},
     io::Write,
     path::PathBuf,
     process::{self, exit},
