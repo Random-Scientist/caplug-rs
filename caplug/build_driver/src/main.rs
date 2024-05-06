@@ -104,7 +104,6 @@ fn main() {
 
     let _ = std::fs::remove_dir_all(&drvpath);
 
-    create_dir(&drvpath).unwrap();
     create_dir_all(drvpath.join("Contents").join("MacOS")).unwrap();
     File::create(drvpath.join("Contents").join("Info.plist"))
         .unwrap()
@@ -119,9 +118,9 @@ fn main() {
         let installpath = format!("/library/Audio/Plug-Ins/HAL/{}.driver", package_name);
         let _ = std::fs::remove_dir_all(&installpath);
         copy_dir(&drvpath, &installpath).unwrap();
-        println!("installed driver!")
+        println!("installed driver to {}", &installpath);
     }
-    println!("Wrote driver to {:?}", &drvpath);
+    println!("Built driver to {:?}", &drvpath);
 }
 
 fn make_info_plist(package_name: &str, package_version: &str) -> String {
@@ -172,6 +171,7 @@ fn make_info_plist(package_name: &str, package_version: &str) -> String {
     )
 }
 
+//Thanks StackOverflow :)
 use std::fs;
 use std::path::Path;
 

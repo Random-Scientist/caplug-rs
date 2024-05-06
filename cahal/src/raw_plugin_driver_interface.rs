@@ -3,14 +3,13 @@ use std::{
     ptr::{self, NonNull},
 };
 
-use core_foundation::{propertylist::CFPropertyListRef, string::CFStringRef, uuid::CFUUIDRef};
+use core_foundation::{propertylist::CFPropertyListRef, string::CFStringRef};
 use coreaudio_sys::{
     pid_t, AudioObjectID, AudioObjectPropertyAddress, AudioServerPlugInClientInfo,
     AudioServerPlugInDriverInterface, AudioServerPlugInDriverRef, AudioServerPlugInHostInterface,
     AudioServerPlugInHostRef, AudioServerPlugInIOCycleInfo, CFAllocatorRef, CFDictionaryRef,
     OSStatus, HRESULT, LPVOID, REFIID, ULONG,
 };
-use uuid::Uuid;
 
 use crate::os_err::{result_from_raw, OSStatusError, ResultExt};
 
