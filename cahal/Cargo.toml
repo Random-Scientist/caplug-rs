@@ -13,3 +13,4 @@ once_cell = "1.19.0"
 oslog = "0.2.0"
 polonius-the-crab = "0.4.1"
 strum = { version = "0.26.2", features = ["derive"] }
+uuid = "1.8.0"

@@ -10,6 +10,7 @@ use coreaudio_sys::{
     AudioServerPlugInHostRef, AudioServerPlugInIOCycleInfo, CFAllocatorRef, CFDictionaryRef,
     OSStatus, HRESULT, LPVOID, REFIID, ULONG,
 };
+use uuid::Uuid;
 
 use crate::os_err::{result_from_raw, OSStatusError, ResultExt};
 
@@ -40,7 +41,6 @@ pub trait RawAudioServerPlugInDriverInterface {
         DoIOOperation: Some(Self::do_io_operation),
         EndIOOperation: Some(Self::end_io_operation),
     };
-    const NAME: &'static str;
     ///	This is the CFPlugIn factory function. Its job is to create the implementation for the given
     ///	type provided that the type is supported. Because this driver is simple and all its
     ///	initialization is handled via static iniitalization when the bundle is loaded, all that

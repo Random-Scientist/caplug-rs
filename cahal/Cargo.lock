@@ -54,6 +54,7 @@ dependencies = [
  "oslog",
  "polonius-the-crab",
  "strum",
+ "uuid 1.8.0",
 ]
 
 [[package]]
@@ -96,7 +97,7 @@ checksum = "91e195e091a93c46f7102ec7818a2aa394e1e1771c3ab4825963fa03e45afb8f"
 dependencies = [
  "core-foundation-sys",
  "libc",
- "uuid",
+ "uuid 0.5.1",
 ]
 
 [[package]]
@@ -411,6 +412,12 @@ name = "uuid"
 version = "0.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "bcc7e3b898aa6f6c08e5295b6c89258d1331e9ac578cc992fb818759951bdc22"
+
+[[package]]
+name = "uuid"
+version = "1.8.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a183cf7feeba97b4dd1c0d46788634f6221d87fa961b305bed08c851829efcc0"
 
 [[package]]
 name = "windows-targets"
