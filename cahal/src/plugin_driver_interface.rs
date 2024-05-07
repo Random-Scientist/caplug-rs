@@ -1,5 +1,5 @@
 use core_foundation::{
-    base::{kCFAllocatorDefault, CFAllocatorRef, CFEqual},
+    base::{kCFAllocatorDefault, CFAllocatorRef, CFEqual, CFRelease},
     uuid::{CFUUIDCreateFromUUIDBytes, CFUUIDGetConstantUUIDWithBytes, CFUUIDRef},
 };
 use coreaudio_sys::{kAudioHardwareIllegalOperationError, AudioServerPlugInDriverInterface};
@@ -15,8 +15,14 @@ use crate::{
     raw_plugin_driver_interface::{PluginHostInterface, RawAudioServerPlugInDriverInterface},
 };
 
+/// ## Audio Server Plugin Interface
+///
+/// This is the interface that contains all of the functions CoreAudio needs to interact with your driver.
+///
+/// ####
 pub trait AudioServerPluginDriverInterface {
     const NAME: &'static str;
+    /// This is the constructor of your driver. You will probably want to allocate multiple lockfree queues for communication.
     fn create(cf_allocator: CFAllocatorRef) -> Self;
     fn init(&self, host: PluginHostInterface) -> crate::os_err::OSStatus;
 }
@@ -96,6 +102,8 @@ where
         if requested_uuid.is_null() {
             return kAudioHardwareIllegalOperationError as i32;
         }
+        //HRESULT ok
+        let mut ret = 0;
         if unsafe {
             CFEqual(
                 requested_uuid.cast(),
@@ -105,12 +113,13 @@ where
         } {
             info!("query interface matched");
             unsafe { ptr::write(out_interface, driver) }
-            //HRESULT ok
-            return 0;
+        } else {
+            // E_NOINTERFACE, CFPlugInCOM.h
+            ret = 0x80000004u32 as i32;
+            warn!("Requested interface did not match in QueryInterface!");
         }
-        warn!("E_NOINTERFACE returned from query_interface");
-        // E_NOINTERFACE, CFPlugInCOM.h
-        return 0x80000004u32 as i32;
+        unsafe { CFRelease(requested_uuid.cast()) }
+        ret
     }
 
     unsafe extern "C" fn retain(driver: *mut std::ffi::c_void) -> coreaudio_sys::ULONG {

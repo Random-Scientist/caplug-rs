@@ -254,6 +254,9 @@ pub trait RawAudioServerPlugInDriverInterface {
     ) -> OSStatus;
 }
 
+// This value is not mutated (provided by a static implementation of the plugin host), and is safe to
+unsafe impl Sync for PluginHostInterface {}
+unsafe impl Send for PluginHostInterface {}
 #[repr(C)]
 #[derive(Clone, Copy, Debug)]
 pub struct PluginHostInterface {
@@ -266,7 +269,10 @@ impl PluginHostInterface {
             inner: NonNull::new(inner.cast_mut())?,
         })
     }
-    //TODO add doc commends from Apple headers
+    /// This method informs the Host when the state of an plug-in's object changes.
+    ///
+    /// Note that for Device objects, this method is only used for state changes
+    /// that don't affect IO or the structure of the device.
     pub unsafe fn properties_changed<'a>(
         &self,
         in_object_id: AudioObjectID,
@@ -288,6 +294,7 @@ impl PluginHostInterface {
             properties.as_ptr(),
         ))
     }
+    /// This method will fetch the data associated with the named storage key.
     pub unsafe fn copy_from_storage(
         &self,
         in_key: CFStringRef,
@@ -303,6 +310,11 @@ impl PluginHostInterface {
             out_data,
         ))
     }
+    /// This method will associate the given data with the named storage key,
+    /// replacing any existing data.
+    ///
+    /// Note that any data stored this way is persists beyond the life span of the
+    /// Host including across rebooting.
     pub unsafe fn write_to_storage(
         &self,
         in_key: CFStringRef,
@@ -318,6 +330,7 @@ impl PluginHostInterface {
             in_data,
         ))
     }
+    /// This method will remove the given key and any associated data from storage.
     pub unsafe fn delete_from_storage(&self, in_key: CFStringRef) -> crate::os_err::OSStatus {
         let Some(f) = (unsafe { ptr::read(self.inner.as_ptr().cast_const()).DeleteFromStorage })
         else {
