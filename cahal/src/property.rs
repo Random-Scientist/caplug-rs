@@ -93,6 +93,7 @@ impl<T: Clone + 'static, const SEL: u32, const MUTABLE_PROP: bool> RawProperty
             OSStatusError::HW_BAD_PROPERTY_SIZE_ERR
         );
         ret_assert!(
+            //TODO avoid this janky alignment check now that the guarantees of ptr::align_to() have been strengthened (rust 1.77) to make it not useless
             data as usize % self.byte_size()? as usize == 0,
             OSStatusError::HW_BAD_OBJECT_ERR
         );
@@ -153,6 +154,7 @@ impl<T, const SEL: u32, const MUTABLE_PROP: bool> DerefMut for ArrayProp<T, SEL,
     }
 }
 impl<T, const SEL: u32, const MUTABLE_PROP: bool> ArrayProp<T, SEL, MUTABLE_PROP> {
+    //TODO: dejank this, should be an associated constant
     fn item_align(&self) -> OSResult<u32> {
         std::mem::size_of::<T>()
             .try_into()

@@ -5,14 +5,14 @@ use cahal::{
 };
 
 pub struct TestPlugin {
-    value: u8,
+    _value: u8,
 }
 impl AudioServerPluginDriverInterface for TestPlugin {
     type DeviceConfigurationChangeInfo = ();
     const NAME: &'static str = "test_plugin";
 
     fn create(_cf_allocator: CFAllocatorRef) -> Self {
-        Self { value: 0 }
+        Self { _value: 0 }
     }
 
     fn init(&self, _host: PluginHostInterface<Self>) -> cahal::os_err::OSStatus {

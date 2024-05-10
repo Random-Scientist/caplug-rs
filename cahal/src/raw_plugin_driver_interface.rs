@@ -1,5 +1,4 @@
 use std::{
-    any::Any,
     ffi::c_void,
     marker::PhantomData,
     ptr::{self, NonNull},
@@ -7,8 +6,7 @@ use std::{
 
 use core_foundation::{
     base::TCFType,
-    dictionary::CFDictionary,
-    propertylist::{CFPropertyList, CFPropertyListRef},
+    propertylist::CFPropertyList,
     string::{CFString, CFStringRef},
 };
 use coreaudio_sys::{

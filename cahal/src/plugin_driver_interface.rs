@@ -52,6 +52,8 @@ macro_rules! validate_impl_ref {
         f
     }};
 }
+//Until this is fully implemented
+#[allow(unused_variables)]
 impl<Implementation> RawAudioServerPlugInDriverInterface for Implementation
 where
     Implementation: Sync + AudioServerPluginDriverInterface + 'static,
