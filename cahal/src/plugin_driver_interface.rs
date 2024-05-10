@@ -19,12 +19,23 @@ use crate::{
 ///
 /// This is the interface that contains all of the functions CoreAudio needs to interact with your driver.
 ///
-/// ####
+/// #### Real Time safety
+/// This interface contains *real time* functions. These functions (marked in documentation comments) MUST run in constant time.
+/// ANY lag spikes will cause undesirable audio glitches
+/// * Code in the `*_io` and `*_io_operation` functions on this trait must execute in constant time
+/// * Functions will be marked as requiring real time safe execution on a best effort basis as I investigate CoreAudio further
+///
+/// #### Thread Safety
+/// Functions in this interface implementation can be called from any thread, at any time, at the disgression of the OS
+/// and its client applications. As such, functions are passed a *shared* reference to the implementation's global state and it is required that that state implement `Sync`.
+///
 pub trait AudioServerPluginDriverInterface {
+    /// The type (likely either an enum or `()`) used to communicate changes in device state through the CoreAudio HAL machinery
+    type DeviceConfigurationChangeInfo;
     const NAME: &'static str;
     /// This is the constructor of your driver. You will probably want to allocate multiple lockfree queues for communication.
     fn create(cf_allocator: CFAllocatorRef) -> Self;
-    fn init(&self, host: PluginHostInterface) -> crate::os_err::OSStatus;
+    fn init(&self, host: PluginHostInterface<Self>) -> crate::os_err::OSStatus;
 }
 
 #[repr(C)]
@@ -43,7 +54,7 @@ macro_rules! validate_impl_ref {
 }
 impl<Implementation> RawAudioServerPlugInDriverInterface for Implementation
 where
-    Implementation: Sync + AudioServerPluginDriverInterface,
+    Implementation: Sync + AudioServerPluginDriverInterface + 'static,
 {
     unsafe extern "C" fn create(
         alloc: coreaudio_sys::CFAllocatorRef,

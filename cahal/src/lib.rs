@@ -21,7 +21,7 @@ pub mod os_err {
     use crate::const_nonzero_u32;
 
     pub type OSResult<T> = Result<T, OSStatusError>;
-    pub fn result_from_raw(value: i32) -> OSStatus {
+    pub fn result_from_err_code(value: i32) -> OSStatus {
         if let Some(val) = NonZeroU32::new(value as u32) {
             Err(OSStatusError(val))
         } else {

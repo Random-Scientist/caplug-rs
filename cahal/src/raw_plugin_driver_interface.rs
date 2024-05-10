@@ -1,9 +1,16 @@
 use std::{
+    any::Any,
     ffi::c_void,
+    marker::PhantomData,
     ptr::{self, NonNull},
 };
 
-use core_foundation::{propertylist::CFPropertyListRef, string::CFStringRef};
+use core_foundation::{
+    base::TCFType,
+    dictionary::CFDictionary,
+    propertylist::{CFPropertyList, CFPropertyListRef},
+    string::{CFString, CFStringRef},
+};
 use coreaudio_sys::{
     pid_t, AudioObjectID, AudioObjectPropertyAddress, AudioServerPlugInClientInfo,
     AudioServerPlugInDriverInterface, AudioServerPlugInDriverRef, AudioServerPlugInHostInterface,
@@ -11,7 +18,10 @@ use coreaudio_sys::{
     OSStatus, HRESULT, LPVOID, REFIID, ULONG,
 };
 
-use crate::os_err::{result_from_raw, OSStatusError, ResultExt};
+use crate::{
+    os_err::{result_from_err_code, OSResult, OSStatusError, ResultExt},
+    plugin_driver_interface::AudioServerPluginDriverInterface,
+};
 
 pub trait RawAudioServerPlugInDriverInterface {
     /// Holds the full implementation of this trait in a struct of function pointers
@@ -255,88 +265,111 @@ pub trait RawAudioServerPlugInDriverInterface {
 }
 
 // This value is not mutated (provided by a static implementation of the plugin host), and is safe to send between threads and access without syncronization
-unsafe impl Sync for PluginHostInterface {}
-unsafe impl Send for PluginHostInterface {}
+unsafe impl<T: AudioServerPluginDriverInterface> Sync for PluginHostInterface<T> {}
+unsafe impl<T: AudioServerPluginDriverInterface> Send for PluginHostInterface<T> {}
+//Safe to duplicate this structure since the internal pointer has shared/immutable provenance
 #[repr(C)]
 #[derive(Clone, Copy, Debug)]
-pub struct PluginHostInterface {
+pub struct PluginHostInterface<Implementation: ?Sized + 'static> {
     inner: NonNull<AudioServerPlugInHostInterface>,
+    _boo: PhantomData<&'static Implementation>,
 }
 
-impl PluginHostInterface {
+impl<Implementation: AudioServerPluginDriverInterface> PluginHostInterface<Implementation> {
     pub fn new(inner: *const AudioServerPlugInHostInterface) -> Option<Self> {
         Some(Self {
             inner: NonNull::new(inner.cast_mut())?,
+            _boo: PhantomData,
         })
     }
     /// This method informs the Host when the state of an plug-in's object changes.
     ///
     /// Note that for Device objects, this method is only used for state changes
     /// that don't affect IO or the structure of the device.
-    pub unsafe fn properties_changed<'a>(
+    pub fn properties_changed(
         &self,
         in_object_id: AudioObjectID,
-        /* the lifetime required of this reference should be investigated */
-        properties: &'a [AudioObjectPropertyAddress],
+        properties: &[AudioObjectPropertyAddress],
     ) -> crate::os_err::OSStatus {
+        //SAFETY: pointer is non-null and the pointee is 'static (as far as I can tell)
         let Some(f) = (unsafe { ptr::read(self.inner.as_ptr().cast_const()).PropertiesChanged })
         else {
             return Err(OSStatusError::HW_ILLEGAL_OPERATION_ERR);
         };
 
-        result_from_raw((f)(
-            self.inner.as_ptr().cast_const(),
-            in_object_id,
-            properties
-                .len()
-                .try_into()
-                .replace_err(OSStatusError::HW_BAD_PROPERTY_SIZE_ERR)?,
-            properties.as_ptr(),
-        ))
+        result_from_err_code(unsafe {
+            (f)(
+                //SAFETY: all pointers are guaranteed to be correctly initialized
+                self.inner.as_ptr().cast_const(),
+                in_object_id,
+                properties
+                    .len()
+                    .try_into()
+                    .replace_err(OSStatusError::HW_BAD_PROPERTY_SIZE_ERR)?,
+                properties.as_ptr(),
+            )
+        })
     }
     /// This method will fetch the data associated with the named storage key.
-    pub unsafe fn copy_from_storage(
-        &self,
-        in_key: CFStringRef,
-        out_data: *mut CFPropertyListRef,
-    ) -> crate::os_err::OSStatus {
+    pub fn copy_from_storage(&self, in_key: CFStringRef) -> OSResult<CFPropertyList> {
         let Some(f) = (unsafe { ptr::read(self.inner.as_ptr().cast_const()).CopyFromStorage })
         else {
             return Err(OSStatusError::HW_ILLEGAL_OPERATION_ERR);
         };
-        result_from_raw((f)(
-            self.inner.as_ptr().cast_const(),
-            in_key.cast(),
-            out_data,
-        ))
+        let mut plistref = ptr::null();
+
+        result_from_err_code(unsafe {
+            (f)(
+                self.inner.as_ptr().cast_const(),
+                in_key.cast(),
+                &mut plistref as *mut *const c_void,
+            )
+        })?;
+        if plistref == ptr::null() {
+            return Err(OSStatusError::HW_UNSPECIFIED_ERR);
+        }
+        //TODO check apple documentation on whether this should be get or create rule.
+        //SAFETY: pointer is checked to be non-null, create rule
+        Ok(unsafe { CFPropertyList::wrap_under_create_rule(plistref) })
     }
     /// This method will associate the given data with the named storage key,
     /// replacing any existing data.
     ///
     /// Note that any data stored this way is persists beyond the life span of the
     /// Host including across rebooting.
-    pub unsafe fn write_to_storage(
+    pub fn write_to_storage(
         &self,
-        in_key: CFStringRef,
-        in_data: CFPropertyListRef,
+        in_key: CFString,
+        in_data: CFPropertyList,
     ) -> crate::os_err::OSStatus {
         let Some(f) = (unsafe { ptr::read(self.inner.as_ptr().cast_const()).WriteToStorage })
         else {
             return Err(OSStatusError::HW_ILLEGAL_OPERATION_ERR);
         };
-        result_from_raw((f)(
-            self.inner.as_ptr().cast_const(),
-            in_key.cast(),
-            in_data,
-        ))
+        result_from_err_code(
+            //SAFETY: all objects passed in are guaranteed to be correctly initialized by core_foundation
+            unsafe {
+                (f)(
+                    self.inner.as_ptr().cast_const(),
+                    in_key.as_CFTypeRef().cast(),
+                    in_data.as_CFTypeRef(),
+                )
+            },
+        )
     }
     /// This method will remove the given key and any associated data from storage.
-    pub unsafe fn delete_from_storage(&self, in_key: CFStringRef) -> crate::os_err::OSStatus {
+    pub fn delete_from_storage(&self, in_key: CFString) -> crate::os_err::OSStatus {
         let Some(f) = (unsafe { ptr::read(self.inner.as_ptr().cast_const()).DeleteFromStorage })
         else {
             return Err(OSStatusError::HW_ILLEGAL_OPERATION_ERR);
         };
-        result_from_raw((f)(self.inner.as_ptr().cast_const(), in_key.cast()))
+        result_from_err_code(unsafe {
+            //SAFETY: all objects passed in are guaranteed to be correctly initialized by core_foundation
+            (f)(
+                self.inner.as_ptr().cast_const(),
+                in_key.as_CFTypeRef().cast(),
+            )
+        })
     }
     pub unsafe fn request_device_configuration_change(
         &self,
@@ -350,11 +383,31 @@ impl PluginHostInterface {
             return Err(OSStatusError::HW_ILLEGAL_OPERATION_ERR);
         };
 
-        result_from_raw((f)(
+        result_from_err_code((f)(
             self.inner.as_ptr().cast_const(),
             in_device_object_id,
             in_change_action,
             in_change_info,
         ))
+    }
+    /// request a device configuration change with boxed change info
+    pub fn request_boxed_device_configuration_change(
+        &self,
+        in_device_object_id: AudioObjectID,
+        in_change_action: u64,
+        in_change_info: Option<Box<Implementation::DeviceConfigurationChangeInfo>>,
+    ) -> crate::os_err::OSStatus {
+        let mut ptr = ptr::null_mut();
+        if let Some(p) = in_change_info.map(Box::into_raw) {
+            ptr = p;
+        };
+        //SAFETY: pointer is either an owning pointer to a correctly initialized `Box<Implementation::DeviceConfigurationChangeInfo>` or null
+        unsafe {
+            self.request_device_configuration_change(
+                in_device_object_id,
+                in_change_action,
+                ptr.cast(),
+            )
+        }
     }
 }
