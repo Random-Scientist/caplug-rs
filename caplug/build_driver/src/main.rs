@@ -115,7 +115,7 @@ fn main() {
     )
     .unwrap();
     if args.install {
-        let installpath = format!("/library/Audio/Plug-Ins/HAL/{}.driver", package_name);
+        let installpath = format!("/Library/Audio/Plug-Ins/HAL/{}.driver", package_name);
         let _ = std::fs::remove_dir_all(&installpath);
         copy_dir(&drvpath, &installpath).unwrap();
         println!("installed driver to {}", &installpath);
