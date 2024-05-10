@@ -1,5 +1,4 @@
 pub mod audio_object;
-pub mod macros;
 pub mod plugin_driver_interface;
 pub mod property;
 pub mod raw_plugin_driver_interface;
@@ -18,8 +17,6 @@ pub mod os_err {
         kAudioHardwareUnspecifiedError, kAudioHardwareUnsupportedOperationError,
     };
 
-    use crate::const_nonzero_u32;
-
     pub type OSResult<T> = Result<T, OSStatusError>;
     pub fn result_from_err_code(value: i32) -> OSStatus {
         if let Some(val) = NonZeroU32::new(value as u32) {
@@ -33,6 +30,12 @@ pub mod os_err {
             Ok(()) => 0,
             Err(n) => n.0.get() as i32,
         }
+    }
+    macro_rules! const_nonzero_u32 {
+        ($e:expr) => {{
+            const _: () = assert!($e != 0, "Tried to initialize const NonZeroU32 with 0");
+            unsafe { ::core::num::NonZeroU32::new_unchecked($e) }
+        }};
     }
     #[derive(Debug, Clone, Copy)]
     #[repr(transparent)]
@@ -96,4 +99,14 @@ mod tests {
         assert_eq!(v.pop().unwrap().selector(), SEL2.into());
         assert_eq!(v.pop().unwrap().selector(), SEL1.into());
     }
+}
+/// Creates the necessary CFPlugin entry point function (named "__create_driver")
+#[macro_export]
+macro_rules! entry_point {
+    ($t:ty) => {
+        #[no_mangle]
+        pub unsafe extern "C" fn __create_driver(alloc: ::cahal::base::CFAllocatorRef, requested_uuid: ::cahal::base::CFUUIDRef) -> *mut ::std::ffi::c_void {
+            <$t as ::cahal::raw_plugin_driver_interface::RawAudioServerPlugInDriverInterface>::create(alloc, requested_uuid)
+        }
+    };
 }

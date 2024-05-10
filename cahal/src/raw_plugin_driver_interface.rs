@@ -329,7 +329,7 @@ impl<Implementation: AudioServerPluginDriverInterface> PluginHostInterface<Imple
             return Err(OSStatusError::HW_UNSPECIFIED_ERR);
         }
         //TODO check apple documentation on whether this should be get or create rule.
-        //SAFETY: pointer is checked to be non-null, create rule
+        //SAFETY: pointer is checked to be non-null, see above
         Ok(unsafe { CFPropertyList::wrap_under_create_rule(plistref) })
     }
     /// This method will associate the given data with the named storage key,

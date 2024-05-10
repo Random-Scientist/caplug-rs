@@ -7,10 +7,7 @@ use std::{
     ptr,
 };
 
-use crate::{
-    os_err::{OSResult, OSStatus, OSStatusError, ResultExt},
-    ret_assert,
-};
+use crate::os_err::{OSResult, OSStatus, OSStatusError, ResultExt};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[repr(transparent)]
@@ -47,6 +44,19 @@ pub trait RawProperty {
         data_out: *mut c_void,
         data_len_out: *mut u32,
     ) -> OSStatus;
+}
+
+macro_rules! ret_assert {
+    ($cond:expr, $err:expr) => {
+        if !($cond) {
+            return Err($err);
+        }
+    };
+    ($cond:expr) => {
+        if !($cond) {
+            return Err(OSStatusError::HW_UNSPECIFIED_ERR);
+        }
+    };
 }
 
 #[derive(Debug, Clone)]
