@@ -254,7 +254,7 @@ pub trait RawAudioServerPlugInDriverInterface {
     ) -> OSStatus;
 }
 
-// This value is not mutated (provided by a static implementation of the plugin host), and is safe to
+// This value is not mutated (provided by a static implementation of the plugin host), and is safe to send between threads and access without syncronization
 unsafe impl Sync for PluginHostInterface {}
 unsafe impl Send for PluginHostInterface {}
 #[repr(C)]
