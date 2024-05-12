@@ -274,7 +274,7 @@ pub struct PluginHostInterface<Implementation: ?Sized + 'static> {
 }
 
 impl<Implementation: AudioServerPluginDriverInterface> PluginHostInterface<Implementation> {
-    pub fn new(inner: *const AudioServerPlugInHostInterface) -> Option<Self> {
+    pub unsafe fn new(inner: *const AudioServerPlugInHostInterface) -> Option<Self> {
         Some(Self {
             inner: NonNull::new(inner.cast_mut())?,
             _boo: PhantomData,
@@ -289,15 +289,15 @@ impl<Implementation: AudioServerPluginDriverInterface> PluginHostInterface<Imple
         in_object_id: AudioObjectID,
         properties: &[AudioObjectPropertyAddress],
     ) -> crate::os_err::OSStatus {
-        //SAFETY: pointer is non-null and the pointee is 'static (as far as I can tell)
+        //SAFETY: pointer is non-null and the pointee is 'static (CoreAudio HAL outlives plugins)
         let Some(f) = (unsafe { ptr::read(self.inner.as_ptr().cast_const()).PropertiesChanged })
         else {
             return Err(OSStatusError::HW_ILLEGAL_OPERATION_ERR);
         };
 
+        //SAFETY: all objects passed in are guaranteed to be correctly initialized by core_foundation
         result_from_err_code(unsafe {
             (f)(
-                //SAFETY: all pointers are guaranteed to be correctly initialized
                 self.inner.as_ptr().cast_const(),
                 in_object_id,
                 properties
@@ -310,12 +310,13 @@ impl<Implementation: AudioServerPluginDriverInterface> PluginHostInterface<Imple
     }
     /// This method will fetch the data associated with the named storage key.
     pub fn copy_from_storage(&self, in_key: CFStringRef) -> OSResult<CFPropertyList> {
+        //SAFETY: see propertes_changed
         let Some(f) = (unsafe { ptr::read(self.inner.as_ptr().cast_const()).CopyFromStorage })
         else {
             return Err(OSStatusError::HW_ILLEGAL_OPERATION_ERR);
         };
         let mut plistref = ptr::null();
-
+        //SAFETY: all objects passed in are guaranteed to be correctly initialized by core_foundation
         result_from_err_code(unsafe {
             (f)(
                 self.inner.as_ptr().cast_const(),
@@ -326,8 +327,7 @@ impl<Implementation: AudioServerPluginDriverInterface> PluginHostInterface<Imple
         if plistref == ptr::null() {
             return Err(OSStatusError::HW_UNSPECIFIED_ERR);
         }
-        //TODO check apple documentation on whether this should be get or create rule.
-        //SAFETY: pointer is checked to be non-null, see above
+        //SAFETY: pointer is checked to be non-null, wrapped with create rule since "user is responsible for releasing the return object"
         Ok(unsafe { CFPropertyList::wrap_under_create_rule(plistref) })
     }
     /// This method will associate the given data with the named storage key,
@@ -340,6 +340,7 @@ impl<Implementation: AudioServerPluginDriverInterface> PluginHostInterface<Imple
         in_key: CFString,
         in_data: CFPropertyList,
     ) -> crate::os_err::OSStatus {
+        //SAFETY: see propertes_changed
         let Some(f) = (unsafe { ptr::read(self.inner.as_ptr().cast_const()).WriteToStorage })
         else {
             return Err(OSStatusError::HW_ILLEGAL_OPERATION_ERR);
@@ -357,6 +358,7 @@ impl<Implementation: AudioServerPluginDriverInterface> PluginHostInterface<Imple
     }
     /// This method will remove the given key and any associated data from storage.
     pub fn delete_from_storage(&self, in_key: CFString) -> crate::os_err::OSStatus {
+        //SAFETY: see propertes_changed
         let Some(f) = (unsafe { ptr::read(self.inner.as_ptr().cast_const()).DeleteFromStorage })
         else {
             return Err(OSStatusError::HW_ILLEGAL_OPERATION_ERR);
@@ -375,6 +377,7 @@ impl<Implementation: AudioServerPluginDriverInterface> PluginHostInterface<Imple
         in_change_action: u64,
         in_change_info: *mut c_void,
     ) -> crate::os_err::OSStatus {
+        //SAFETY: see propertes_changed
         let Some(f) = (unsafe {
             ptr::read(self.inner.as_ptr().cast_const()).RequestDeviceConfigurationChange
         }) else {

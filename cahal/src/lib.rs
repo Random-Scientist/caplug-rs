@@ -18,6 +18,7 @@ pub mod os_err {
     };
 
     pub type OSResult<T> = Result<T, OSStatusError>;
+    #[inline]
     pub fn result_from_err_code(value: i32) -> OSStatus {
         if let Some(val) = NonZeroU32::new(value as u32) {
             Err(OSStatusError(val))
