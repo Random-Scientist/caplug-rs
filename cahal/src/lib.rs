@@ -100,13 +100,25 @@ mod tests {
         assert_eq!(v.pop().unwrap().selector(), SEL1.into());
     }
 }
-/// Creates the necessary CFPlugin entry point function (named "__create_driver")
+/// Creates the necessary CFPlugin entry point function (named `__create_driver`) that provides your plugin implementation to the runtime:
+/// ```no_run
+/// pub struct Driver {
+///     ...
+/// }
+/// impl AudioServerPluginInterface for Driver {
+///     ...
+/// }
+/// entry_point!(Driver);
+/// ```
 #[macro_export]
 macro_rules! entry_point {
-    ($t:ty) => {
+    ($implementation_type:ty) => {
         #[no_mangle]
         pub unsafe extern "C" fn __create_driver(alloc: ::cahal::base::CFAllocatorRef, requested_uuid: ::cahal::base::CFUUIDRef) -> *mut ::std::ffi::c_void {
-            <$t as ::cahal::raw_plugin_driver_interface::RawAudioServerPlugInDriverInterface>::create(alloc, requested_uuid)
+            <$implementation_type as ::cahal::raw_plugin_driver_interface::RawAudioServerPlugInDriverInterface>::create(alloc, requested_uuid)
         }
     };
+}
+macro_rules! error {
+    ($t:tt) => {};
 }

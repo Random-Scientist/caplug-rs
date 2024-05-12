@@ -49,11 +49,13 @@ pub trait RawProperty {
 macro_rules! ret_assert {
     ($cond:expr, $err:expr) => {
         if !($cond) {
+            ::log::error!("assertion failed: {}", file!());
             return Err($err);
         }
     };
     ($cond:expr) => {
         if !($cond) {
+            ::log::error!("assertion failed: {}", file!());
             return Err(OSStatusError::HW_UNSPECIFIED_ERR);
         }
     };
