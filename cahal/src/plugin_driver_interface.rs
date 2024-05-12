@@ -3,7 +3,7 @@ use core_foundation::{
     uuid::{CFUUIDCreateFromUUIDBytes, CFUUIDGetConstantUUIDWithBytes, CFUUIDRef},
 };
 use coreaudio_sys::{kAudioHardwareIllegalOperationError, AudioServerPlugInDriverInterface};
-use log::{info, warn};
+use log::{error, info, warn};
 use std::{
     mem::transmute,
     ptr,
@@ -45,8 +45,8 @@ pub struct PluginDriverImplementation<T> {
     state: T,
 }
 macro_rules! validate_impl_ref {
-    ($e:expr) => {{
-        let Some(f) = $e.cast::<PluginDriverImplementation<Self>>().as_ref() else {
+    ($ptr:expr) => {{
+        let Some(f) = $ptr.cast::<PluginDriverImplementation<Self>>().as_ref() else {
             return ::coreaudio_sys::kAudioHardwareIllegalOperationError as i32;
         };
         f
@@ -106,13 +106,14 @@ where
         in_uuid: coreaudio_sys::REFIID,
         out_interface: *mut coreaudio_sys::LPVOID,
     ) -> coreaudio_sys::HRESULT {
-        info!("Driver Plugin Driver Interface queried: {}", Self::NAME);
         if out_interface.is_null() {
+            error!("no space for output of query_interface");
             return kAudioHardwareIllegalOperationError as i32;
         }
         let requested_uuid =
             unsafe { CFUUIDCreateFromUUIDBytes(ptr::null_mut(), transmute(in_uuid)) };
         if requested_uuid.is_null() {
+            error!("failed to create new uuid from device in {}", file!());
             return kAudioHardwareIllegalOperationError as i32;
         }
         //HRESULT ok
@@ -138,6 +139,7 @@ where
     unsafe extern "C" fn retain(driver: *mut std::ffi::c_void) -> coreaudio_sys::ULONG {
         let Some(r) = driver.cast::<PluginDriverImplementation<Self>>().as_ref() else {
             //0 refcount for null implementation
+            error!("attempted to retain null implementation");
             return 0;
         };
         // Add the reference we added
@@ -155,6 +157,7 @@ where
     unsafe extern "C" fn release(driver: *mut std::ffi::c_void) -> coreaudio_sys::ULONG {
         //We are not actually supposed to deallocate anything when this reaches 0 for whatever reason (lol!)
         let Some(r) = driver.cast::<PluginDriverImplementation<Self>>().as_ref() else {
+            warn!("attempted to release null implementation");
             //0 refcount for null implementation
             return 0;
         };
