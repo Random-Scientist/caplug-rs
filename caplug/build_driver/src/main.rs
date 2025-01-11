@@ -28,10 +28,7 @@ struct Arguments {
 
 fn main() {
     let args = Arguments::parse();
-    let package_dir = match args.package {
-        Some(path) => path,
-        None => current_dir().unwrap(),
-    };
+    let package_dir = args.package.unwrap_or_else(|| current_dir().unwrap());
     let Ok(toml) = read_to_string(package_dir.join("Cargo.toml")) else {
         eprintln!("Error: Could not read Cargo.toml in the specified directory. Please ensure it is a valid Cargo package");
         exit(-1)
@@ -40,15 +37,16 @@ fn main() {
         eprintln!("Error: Cargo.toml file for this package is malformed");
         exit(-1)
     };
-    let Some(Some(Some(package_name))) =
-        t.get("package").map(|v| v.get("name").map(|v| v.as_str()))
+    let Some(package_name) = t
+        .get("package")
+        .and_then(|v| v.get("name").and_then(|v| v.as_str()))
     else {
         eprintln!("Error: Cargo.toml file does not contain a package name!");
         exit(-1)
     };
-    let Some(Some(Some(package_version))) = t
+    let Some(package_version) = t
         .get("package")
-        .map(|v| v.get("version").map(|v| v.as_str()))
+        .and_then(|v| v.get("version").and_then(|v| v.as_str()))
     else {
         eprintln!("Error: Cargo.toml file does not contain a package version!");
         exit(-1)
@@ -76,7 +74,7 @@ fn main() {
     let mut c = proc.spawn().expect("Error: failed to start cargo");
     c.wait().expect("Error: Cargo wasn't running");
 
-    let target_dir = if std::fs::read_dir(&package_dir.join("target")).is_ok() {
+    let target_dir = if std::fs::read_dir(package_dir.join("target")).is_ok() {
         package_dir.join("target")
     } else {
         let t = std::fs::canonicalize(&package_dir)
@@ -107,7 +105,7 @@ fn main() {
     create_dir_all(drvpath.join("Contents").join("MacOS")).unwrap();
     File::create(drvpath.join("Contents").join("Info.plist"))
         .unwrap()
-        .write_all(&make_info_plist(package_name, package_version).as_bytes())
+        .write_all(make_info_plist(package_name, package_version).as_bytes())
         .unwrap();
     copy(
         libpath,
@@ -124,7 +122,7 @@ fn main() {
 }
 
 fn make_info_plist(package_name: &str, package_version: &str) -> String {
-    let uuid = Uuid::new_v3(&Uuid::NAMESPACE_URL, &package_name.as_bytes());
+    let uuid = Uuid::new_v3(&Uuid::NAMESPACE_URL, package_name.as_bytes());
     format!(
         r##"
 <?xml version="1.0" encoding="UTF-8"?>
@@ -201,14 +199,9 @@ pub fn copy_dir<U: AsRef<Path>, V: AsRef<Path>>(from: U, to: V) -> Result<(), st
             let path = entry.path();
             if path.is_dir() {
                 stack.push(path);
-            } else {
-                match path.file_name() {
-                    Some(filename) => {
-                        let dest_path = dest.join(filename);
-                        fs::copy(&path, &dest_path)?;
-                    }
-                    None => {}
-                }
+            } else if let Some(filename) = path.file_name() {
+                let dest_path = dest.join(filename);
+                fs::copy(&path, &dest_path)?;
             }
         }
     }

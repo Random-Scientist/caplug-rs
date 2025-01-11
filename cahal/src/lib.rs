@@ -18,6 +18,15 @@ pub mod os_err {
     };
 
     pub type OSResult<T> = Result<T, OSStatusError>;
+    macro_rules! const_nonzero_u32 {
+        ($e:expr) => {
+            const {
+                assert!($e != 0, "Tried to initialize const NonZeroU32 with 0");
+                unsafe { ::core::num::NonZeroU32::new_unchecked($e) }
+            }
+        };
+    }
+
     #[inline]
     pub fn result_from_err_code(value: i32) -> OSStatus {
         if let Some(val) = NonZeroU32::new(value as u32) {
@@ -26,18 +35,14 @@ pub mod os_err {
             Ok(())
         }
     }
-    pub fn result_to_raw(value: OSStatus) -> i32 {
+    #[inline]
+    pub fn result_to_err_code(value: OSStatus) -> i32 {
         match value {
             Ok(()) => 0,
             Err(n) => n.0.get() as i32,
         }
     }
-    macro_rules! const_nonzero_u32 {
-        ($e:expr) => {{
-            const _: () = assert!($e != 0, "Tried to initialize const NonZeroU32 with 0");
-            unsafe { ::core::num::NonZeroU32::new_unchecked($e) }
-        }};
-    }
+
     #[derive(Debug, Clone, Copy)]
     #[repr(transparent)]
     pub struct OSStatusError(NonZeroU32);
@@ -84,23 +89,6 @@ pub mod os_err {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use crate::property::{Prop, RawProperty};
-
-    #[test]
-    fn test_property() {
-        const SEL1: u32 = 10;
-        const SEL2: u32 = 12;
-        let i = Prop::<_, SEL1, true>::new(123);
-        let i2 = Prop::<_, SEL2, true>::new(123);
-        let mut v = Vec::<Box<dyn RawProperty>>::new();
-        v.push(Box::new(i));
-        v.push(Box::new(i2));
-        assert_eq!(v.pop().unwrap().selector(), SEL2.into());
-        assert_eq!(v.pop().unwrap().selector(), SEL1.into());
-    }
-}
 /// Creates the necessary CFPlugin entry point function (named `__create_driver`) that provides your plugin implementation to the runtime:
 /// ```no_run
 /// pub struct Driver {
@@ -119,7 +107,4 @@ macro_rules! entry_point {
             <$implementation_type as ::cahal::raw_plugin_driver_interface::RawAudioServerPlugInDriverInterface>::create(alloc, requested_uuid)
         }
     };
-}
-macro_rules! error {
-    ($t:tt) => {};
 }

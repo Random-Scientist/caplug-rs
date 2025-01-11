@@ -1,17 +1,21 @@
 use core_foundation::{
-    base::{kCFAllocatorDefault, CFAllocatorRef, CFEqual, CFRelease},
+    base::{kCFAllocatorDefault, CFAllocatorRef, CFEqual, CFRelease, CFRetain},
     uuid::{CFUUIDCreateFromUUIDBytes, CFUUIDGetConstantUUIDWithBytes, CFUUIDRef},
 };
-use coreaudio_sys::{kAudioHardwareIllegalOperationError, AudioServerPlugInDriverInterface};
+use coreaudio_sys::{
+    kAudioHardwareIllegalOperationError, AudioServerPlugInDriverInterface, REFIID,
+};
 use log::{error, info, warn};
 use std::{
+    cell::OnceCell,
     mem::transmute,
     ptr,
     sync::atomic::{AtomicU32, Ordering},
+    thread::LocalKey,
 };
 
 use crate::{
-    os_err::result_to_raw,
+    os_err::result_to_err_code,
     raw_plugin_driver_interface::{PluginHostInterface, RawAudioServerPlugInDriverInterface},
 };
 
@@ -31,18 +35,20 @@ use crate::{
 ///
 pub trait AudioServerPluginDriverInterface {
     /// The type (likely either an enum or `()`) used to communicate changes in device state through the CoreAudio HAL machinery
-    type DeviceConfigurationChangeInfo;
+    type DeviceConfigurationChangeInfo: Send;
     const NAME: &'static str;
-    /// This is the constructor of your driver. You will probably want to allocate multiple lockfree queues for communication.
+    /// This is the constructor of your driver. You will probably want to allocate resources here, as this is the last time you will have exclusive access to global state
     fn create(cf_allocator: CFAllocatorRef) -> Self;
+    /// This function is called when the HAL tries to bring your driver up, this is where you'll want to do any complex computation, and query the host for information via the host interface
+    /// You're also expected to store the host interface for later use.
     fn init(&self, host: PluginHostInterface<Self>) -> crate::os_err::OSStatus;
 }
 
 #[repr(C)]
 pub struct PluginDriverImplementation<T> {
     implementation: *const AudioServerPlugInDriverInterface,
-    refcount: AtomicU32,
     state: T,
+    refcount: AtomicU32,
 }
 macro_rules! validate_impl_ref {
     ($ptr:expr) => {{
@@ -52,7 +58,7 @@ macro_rules! validate_impl_ref {
         f
     }};
 }
-//Until this is fully implemented
+// Until this is fully implemented
 #[allow(unused_variables)]
 impl<Implementation> RawAudioServerPlugInDriverInterface for Implementation
 where
@@ -70,7 +76,7 @@ where
         }
         #[cfg(debug_assertions)]
         {
-            logger = logger.level_filter(log::LevelFilter::Info);
+            logger = logger.level_filter(log::LevelFilter::Trace);
         }
 
         let Ok(()) = logger.init() else {
@@ -81,15 +87,16 @@ where
         if unsafe {
             CFEqual(
                 requested_uuid.cast(),
-                get_audio_server_driver_plugin_type_uuid().cast(),
+                AUDIO_SERVER_DRIVER_PLUGIN_TYPE.get().cast(),
             ) == 1
         } {
-            //Init and allocate driver
+            // Init and allocate driver
             let driver_state = Implementation::create(alloc.cast());
 
-            //explicitly borrow IMPLEMENTATION for 'static (to ensure that it gets promoted to a static)
+            // explicitly borrow IMPLEMENTATION for 'static (to make it clear that it gets promoted to a static)
             let impl_borrow: &'static AudioServerPlugInDriverInterface = &Self::IMPLEMENTATION;
 
+            // Allocate implementation container
             Box::<_>::into_raw(Box::new(PluginDriverImplementation {
                 implementation: impl_borrow as *const AudioServerPlugInDriverInterface,
                 refcount: AtomicU32::new(1),
@@ -110,8 +117,12 @@ where
             error!("no space for output of query_interface");
             return kAudioHardwareIllegalOperationError as i32;
         }
-        let requested_uuid =
-            unsafe { CFUUIDCreateFromUUIDBytes(ptr::null_mut(), transmute(in_uuid)) };
+        let requested_uuid = unsafe {
+            CFUUIDCreateFromUUIDBytes(
+                ptr::null_mut(),
+                transmute::<REFIID, core_foundation::uuid::CFUUIDBytes>(in_uuid),
+            )
+        };
         if requested_uuid.is_null() {
             error!("failed to create new uuid from device in {}", file!());
             return kAudioHardwareIllegalOperationError as i32;
@@ -121,9 +132,9 @@ where
         if unsafe {
             CFEqual(
                 requested_uuid.cast(),
-                get_audio_server_driver_plugin_interface_uuid().cast(),
+                AUDIO_SERVER_DRIVER_PLUGIN_INTERFACE.get().cast(),
             ) == 1
-                || CFEqual(requested_uuid.cast(), get_i_unknown_interface_uuid().cast()) == 1
+                || CFEqual(requested_uuid.cast(), I_UNKNOWN_INTERFACE.get().cast()) == 1
         } {
             info!("query interface matched");
             unsafe { ptr::write(out_interface, driver) }
@@ -155,7 +166,7 @@ where
     }
 
     unsafe extern "C" fn release(driver: *mut std::ffi::c_void) -> coreaudio_sys::ULONG {
-        //We are not actually supposed to deallocate anything when this reaches 0 for whatever reason (lol!)
+        // We are not actually supposed to deallocate anything when this reaches 0 for whatever reason
         let Some(r) = driver.cast::<PluginDriverImplementation<Self>>().as_ref() else {
             warn!("attempted to release null implementation");
             //0 refcount for null implementation
@@ -181,7 +192,7 @@ where
             return kAudioHardwareIllegalOperationError as i32;
         };
         let implementation = validate_impl_ref!(driver);
-        return result_to_raw(implementation.state.init(hostref));
+        result_to_err_code(implementation.state.init(hostref))
     }
 
     unsafe extern "C" fn create_device(
@@ -366,64 +377,79 @@ where
         todo!()
     }
 }
+const fn uuid_u128(uuid: [u8; 16]) -> u128 {
+    u128::from_le_bytes(uuid)
+}
+thread_local! {
+    static I_UNKNOWN_INTERFACE: StaticUUID<
+            {
+                uuid_u128([
+                    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xC0, 0x00, 0x00, 0x00, 0x00, 0x00,
+                    0x00, 0x46,
+                ])
+            },
+        > = const { StaticUUID::new() };
+    static AUDIO_SERVER_DRIVER_PLUGIN_INTERFACE: StaticUUID<
+            {
+                uuid_u128([
+                    0xEE, 0xA5, 0x77, 0x3D, 0xCC, 0x43, 0x49, 0xF1, 0x8E, 0x00, 0x8F, 0x96, 0xE7, 0xD2, 0x3B,
+                    0x17,
+                ])
+            }
+        > = const { StaticUUID::new() };
+    static AUDIO_SERVER_DRIVER_PLUGIN_TYPE: StaticUUID<
+            {
+                uuid_u128([
+                    0x44, 0x3A, 0xBA, 0xB8, 0xE7, 0xB3, 0x49, 0x1A, 0xB9, 0x85, 0xBE, 0xB9, 0x18, 0x70, 0x30,
+                    0xDB,
+                ])
+            }
+        > = const { StaticUUID::new() };
 
-fn get_uuid_ref_from_bytes(
-    byte0: u8,
-    byte1: u8,
-    byte2: u8,
-    byte3: u8,
-    byte4: u8,
-    byte5: u8,
-    byte6: u8,
-    byte7: u8,
-    byte8: u8,
-    byte9: u8,
-    byte10: u8,
-    byte11: u8,
-    byte12: u8,
-    byte13: u8,
-    byte14: u8,
-    byte15: u8,
-) -> CFUUIDRef {
-    unsafe {
-        CFUUIDGetConstantUUIDWithBytes(
-            kCFAllocatorDefault,
-            byte0,
-            byte1,
-            byte2,
-            byte3,
-            byte4,
-            byte5,
-            byte6,
-            byte7,
-            byte8,
-            byte9,
-            byte10,
-            byte11,
-            byte12,
-            byte13,
-            byte14,
-            byte15,
-        )
+}
+
+struct StaticUUID<const UUID: u128> {
+    cache: OnceCell<CFUUIDRef>,
+}
+impl<const UUID: u128> StaticUUID<UUID> {
+    const fn new() -> Self {
+        Self {
+            cache: OnceCell::new(),
+        }
+    }
+    fn get(&self) -> CFUUIDRef {
+        *self.cache.get_or_init(|| {
+            let uuid = UUID.to_le_bytes();
+            let r = unsafe {
+                CFUUIDGetConstantUUIDWithBytes(
+                    kCFAllocatorDefault,
+                    uuid[0],
+                    uuid[1],
+                    uuid[2],
+                    uuid[3],
+                    uuid[4],
+                    uuid[5],
+                    uuid[6],
+                    uuid[7],
+                    uuid[8],
+                    uuid[9],
+                    uuid[10],
+                    uuid[11],
+                    uuid[12],
+                    uuid[13],
+                    uuid[14],
+                    uuid[15],
+                )
+            };
+            unsafe { CFRetain(r.cast()) }.cast()
+        })
     }
 }
-fn get_audio_server_driver_plugin_type_uuid() -> CFUUIDRef {
-    get_uuid_ref_from_bytes(
-        0x44, 0x3A, 0xBA, 0xB8, 0xE7, 0xB3, 0x49, 0x1A, 0xB9, 0x85, 0xBE, 0xB9, 0x18, 0x70, 0x30,
-        0xDB,
-    )
+trait LocalKeyExt {
+    fn get(&'static self) -> CFUUIDRef;
 }
-fn get_audio_server_driver_plugin_interface_uuid() -> CFUUIDRef {
-    // CoreAudio/AudioServerPlugIn.h
-    get_uuid_ref_from_bytes(
-        0xEE, 0xA5, 0x77, 0x3D, 0xCC, 0x43, 0x49, 0xF1, 0x8E, 0x00, 0x8F, 0x96, 0xE7, 0xD2, 0x3B,
-        0x17,
-    )
-}
-fn get_i_unknown_interface_uuid() -> CFUUIDRef {
-    // CFPlugInCOM.h
-    get_uuid_ref_from_bytes(
-        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xC0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-        0x46,
-    )
+impl<const UUID: u128> LocalKeyExt for LocalKey<StaticUUID<UUID>> {
+    fn get(&'static self) -> CFUUIDRef {
+        self.with(|v| v.get())
+    }
 }

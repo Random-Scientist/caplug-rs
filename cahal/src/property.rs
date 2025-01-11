@@ -7,7 +7,7 @@ use std::{
     ptr,
 };
 
-use crate::os_err::{OSResult, OSStatus, OSStatusError, ResultExt};
+use crate::os_err::{OSStatus, OSStatusError, ResultExt};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[repr(transparent)]
@@ -28,7 +28,7 @@ pub trait RawProperty {
     /// Invariant: this function must always return the correct selector for this property or bad things will happen
     fn selector(&self) -> PropertySelector;
     /// Total size in bytes this type occupies
-    fn byte_size(&self) -> OSResult<u32>;
+    fn byte_size(&self) -> u32;
     /// Whether to advertise this property as settable or not
     fn is_mut(&self) -> bool;
     /// Utility function for reading this property's value from Rust
@@ -36,8 +36,12 @@ pub trait RawProperty {
     /// Utility function for mutating this property's value from Rust
     fn as_any_mut(&mut self) -> &mut dyn Any;
     /// Read a value of the type of the property of this implementation from the `data` pointer and write it to the internal storage
+    /// # Safety
+    /// data must point to a valid, initialized value or array of values with the same type as this property, with data size being a multiple of the size of that property
     unsafe fn set(&mut self, data: *const c_void, data_size: u32) -> OSStatus;
     /// Write a value stored in this instance to the allocation at `data_out`
+    /// # Safety
+    /// see discussion under [`RawProperty::set`]
     unsafe fn get(
         &self,
         out_alloc_size: u32,
@@ -49,13 +53,23 @@ pub trait RawProperty {
 macro_rules! ret_assert {
     ($cond:expr, $err:expr) => {
         if !($cond) {
-            ::log::error!("assertion failed: {}", file!());
+            ::log::error!(
+                "assertion {} == true failed in {}:{}",
+                ::std::stringify!($cond),
+                ::std::file!(),
+                ::std::line!()
+            );
             return Err($err);
         }
     };
     ($cond:expr) => {
         if !($cond) {
-            ::log::error!("assertion failed: {}", file!());
+            ::log::error!(
+                "assertion {} == true failed in {}:{}",
+                ::std::stringify!($cond),
+                ::std::file!(),
+                ::std::line!()
+            );
             return Err(OSStatusError::HW_UNSPECIFIED_ERR);
         }
     };
@@ -65,11 +79,17 @@ macro_rules! ret_assert {
 /// A convenient wrapper for Copy types that implements [RawProperty] for them, given the correct selector and mutability in the const generic parameters
 pub struct Prop<T, const SEL: u32, const MUTABLE_PROP: bool>(pub T);
 
-impl<T: Copy, const SEL: u32, const MUTABLE_PROP: bool> Prop<T, SEL, MUTABLE_PROP> {
+impl<T, const SEL: u32, const MUTABLE_PROP: bool> Prop<T, SEL, MUTABLE_PROP> {
+    const SIZE: u32 = const {
+        let size = std::mem::size_of::<T>();
+        assert!(size <= u32::MAX as usize);
+        size as u32
+    };
     pub fn new(val: T) -> Self {
         Self(val)
     }
 }
+
 //SAFETY: selector invariants and
 impl<T: Clone + 'static, const SEL: u32, const MUTABLE_PROP: bool> RawProperty
     for Prop<T, SEL, MUTABLE_PROP>
@@ -78,26 +98,23 @@ impl<T: Clone + 'static, const SEL: u32, const MUTABLE_PROP: bool> RawProperty
         SEL.into()
     }
 
-    fn byte_size(&self) -> OSResult<u32> {
-        std::mem::size_of::<T>()
-            .try_into()
-            .replace_err(OSStatusError::HW_BAD_PROPERTY_SIZE_ERR)
+    fn byte_size(&self) -> u32 {
+        Self::SIZE
     }
-
+    #[inline]
     fn is_mut(&self) -> bool {
         MUTABLE_PROP
     }
 
     unsafe fn set(&mut self, data: *const c_void, data_size: u32) -> OSStatus {
-        ret_assert!(data != ptr::null(), OSStatusError::HW_ILLEGAL_OPERATION_ERR);
+        ret_assert!(!data.is_null(), OSStatusError::HW_ILLEGAL_OPERATION_ERR);
         ret_assert!(
-            data_size == self.byte_size()?,
-            OSStatusError::HW_BAD_PROPERTY_SIZE_ERR
+            (data as *const T).is_aligned(),
+            OSStatusError::HW_BAD_OBJECT_ERR
         );
         ret_assert!(
-            //TODO avoid this janky alignment check now that the guarantees of ptr::align_to() have been strengthened (rust 1.77) to make it not useless
-            data as usize % self.byte_size()? as usize == 0,
-            OSStatusError::HW_BAD_OBJECT_ERR
+            data_size == Self::SIZE,
+            OSStatusError::HW_BAD_PROPERTY_SIZE_ERR
         );
         ret_assert!(self.is_mut());
 
@@ -114,18 +131,16 @@ impl<T: Clone + 'static, const SEL: u32, const MUTABLE_PROP: bool> RawProperty
         data_len_out: *mut u32,
     ) -> OSStatus {
         ret_assert!(
-            data_out != ptr::null_mut() && data_len_out != ptr::null_mut(),
+            !data_out.is_null() && !data_len_out.is_null(),
             OSStatusError::HW_ILLEGAL_OPERATION_ERR
         );
         ret_assert!(
-            out_alloc_size >= self.byte_size()?,
+            out_alloc_size >= Self::SIZE,
             OSStatusError::HW_BAD_PROPERTY_SIZE_ERR
         );
-        ret_assert!(
-            data_out as usize % self.byte_size()? as usize == 0,
-            OSStatusError::HW_BAD_OBJECT_ERR
-        );
-        ptr::write(data_out as *mut T, self.0.clone());
+        let data_out = data_out as *mut T;
+        ret_assert!(data_out.is_aligned(), OSStatusError::HW_BAD_OBJECT_ERR);
+        ptr::write(data_out, self.0.clone());
         Ok(())
     }
 
@@ -156,17 +171,22 @@ impl<T, const SEL: u32, const MUTABLE_PROP: bool> DerefMut for ArrayProp<T, SEL,
     }
 }
 impl<T, const SEL: u32, const MUTABLE_PROP: bool> ArrayProp<T, SEL, MUTABLE_PROP> {
-    //TODO: dejank this, should be an associated constant
-    fn item_align(&self) -> OSResult<u32> {
-        std::mem::size_of::<T>()
-            .try_into()
-            .replace_err(OSStatusError::HW_BAD_PROPERTY_SIZE_ERR)
-    }
+    const ITEM_SIZE: u32 = const {
+        let size = std::mem::size_of::<T>();
+        assert!(size <= u32::MAX as usize);
+        size as u32
+    };
     pub fn new_with(props: Vec<T>) -> Self {
         Self { props }
     }
     pub fn new() -> Self {
         Self { props: Vec::new() }
+    }
+}
+
+impl<T, const SEL: u32, const MUTABLE_PROP: bool> Default for ArrayProp<T, SEL, MUTABLE_PROP> {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -176,13 +196,11 @@ impl<T: Copy + 'static, const SEL: u32, const MUTABLE_PROP: bool> RawProperty
     fn selector(&self) -> PropertySelector {
         SEL.into()
     }
-
-    fn byte_size(&self) -> OSResult<u32> {
-        (std::mem::size_of::<T>() * self.props.len())
-            .try_into()
-            .replace_err(OSStatusError::HW_BAD_PROPERTY_SIZE_ERR)
+    #[inline]
+    fn byte_size(&self) -> u32 {
+        Self::ITEM_SIZE * self.len() as u32
     }
-
+    #[inline]
     fn is_mut(&self) -> bool {
         MUTABLE_PROP
     }
@@ -196,17 +214,16 @@ impl<T: Copy + 'static, const SEL: u32, const MUTABLE_PROP: bool> RawProperty
     }
 
     unsafe fn set(&mut self, data: *const c_void, data_size: u32) -> OSStatus {
-        ret_assert!(data != ptr::null(), OSStatusError::HW_ILLEGAL_OPERATION_ERR);
+        ret_assert!(!data.is_null(), OSStatusError::HW_ILLEGAL_OPERATION_ERR);
         ret_assert!(
-            data_size == self.item_align()?,
+            data_size == Self::ITEM_SIZE,
             OSStatusError::HW_BAD_PROPERTY_SIZE_ERR
         );
-        ret_assert!(
-            data as usize % self.item_align()? as usize == 0,
-            OSStatusError::HW_BAD_OBJECT_ERR
-        );
+        let data = data as *const T;
+        ret_assert!(data.is_aligned(), OSStatusError::HW_BAD_OBJECT_ERR);
         ret_assert!(self.is_mut());
-        let r = slice::from_raw_parts(data as *const T, (data_size / self.item_align()?) as usize);
+
+        let r = slice::from_raw_parts(data, (data_size / Self::ITEM_SIZE) as usize);
         self.props.clear();
         self.props.extend_from_slice(r);
         Ok(())
@@ -219,21 +236,19 @@ impl<T: Copy + 'static, const SEL: u32, const MUTABLE_PROP: bool> RawProperty
         data_len_out: *mut u32,
     ) -> OSStatus {
         ret_assert!(
-            data_out != ptr::null_mut() && data_len_out != ptr::null_mut(),
+            !data_out.is_null() && !data_len_out.is_null(),
             OSStatusError::HW_ILLEGAL_OPERATION_ERR
         );
         ret_assert!(
-            out_alloc_size >= self.item_align()?,
+            out_alloc_size >= Self::ITEM_SIZE,
             OSStatusError::HW_BAD_PROPERTY_SIZE_ERR
         );
-        ret_assert!(
-            data_out as usize % self.item_align()? as usize == 0,
-            OSStatusError::HW_BAD_OBJECT_ERR
-        );
+        let data_out = data_out as *mut T;
+        ret_assert!(data_out.is_aligned(), OSStatusError::HW_BAD_OBJECT_ERR);
 
         let s = slice::from_raw_parts_mut(
             data_out as *mut MaybeUninit<T>,
-            (out_alloc_size / self.item_align()?) as usize,
+            (out_alloc_size / Self::ITEM_SIZE) as usize,
         );
         let to_copy = s.len().min(self.props.len());
         let slice = &self.props[0..s.len().min(self.props.len())];
@@ -242,7 +257,7 @@ impl<T: Copy + 'static, const SEL: u32, const MUTABLE_PROP: bool> RawProperty
 
         s.copy_from_slice(slice);
 
-        *data_len_out = (to_copy * self.item_align()? as usize)
+        *data_len_out = (to_copy * Self::ITEM_SIZE as usize)
             .try_into()
             .replace_err(OSStatusError::HW_BAD_PROPERTY_SIZE_ERR)?;
         Ok(())

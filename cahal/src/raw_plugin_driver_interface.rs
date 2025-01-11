@@ -20,7 +20,7 @@ use crate::{
     os_err::{result_from_err_code, OSResult, OSStatusError, ResultExt},
     plugin_driver_interface::AudioServerPluginDriverInterface,
 };
-
+#[allow(clippy::missing_safety_doc)]
 pub trait RawAudioServerPlugInDriverInterface {
     /// Holds the full implementation of this trait in a struct of function pointers
     const IMPLEMENTATION: AudioServerPlugInDriverInterface = AudioServerPlugInDriverInterface {
@@ -48,24 +48,24 @@ pub trait RawAudioServerPlugInDriverInterface {
         DoIOOperation: Some(Self::do_io_operation),
         EndIOOperation: Some(Self::end_io_operation),
     };
-    ///	This is the CFPlugIn factory function. Its job is to create the implementation for the given
-    ///	type provided that the type is supported. Because this driver is simple and all its
-    ///	initialization is handled via static iniitalization when the bundle is loaded, all that
-    ///	needs to be done is to return the AudioServerPlugInDriverRef that points to the driver's
-    ///	interface. A more complicated driver would create any base line objects it needs to satisfy
-    ///	the IUnknown methods that are used to discover that actual interface to talk to the driver.
-    ///	The majority of the driver's initilization should be handled in the Initialize() method of
-    ///	the driver's AudioServerPlugInDriverInterface.
+    /// This is the CFPlugIn factory function. Its job is to create the implementation for the given
+    /// type provided that the type is supported. Because this driver is simple and all its
+    /// initialization is handled via static iniitalization when the bundle is loaded, all that
+    /// needs to be done is to return the AudioServerPlugInDriverRef that points to the driver's
+    /// interface. A more complicated driver would create any base line objects it needs to satisfy
+    /// the IUnknown methods that are used to discover that actual interface to talk to the driver.
+    /// The majority of the driver's initilization should be handled in the Initialize() method of
+    /// the driver's AudioServerPlugInDriverInterface.
     unsafe extern "C" fn create(
         alloc: CFAllocatorRef,
         requested_uuid: crate::base::CFUUIDRef,
     ) -> *mut c_void;
 
-    ///	This function is called by the HAL to get the interface to talk to the plug-in through.
-    ///	AudioServerPlugIns are required to support the IUnknown interface and the
-    ///	AudioServerPlugInDriverInterface. As it happens, all interfaces must also provide the
-    ///	IUnknown interface, so we can always just return the single interface we made with
-    ///	gAudioServerPlugInDriverInterfacePtr regardless of which one is asked for.
+    /// This function is called by the HAL to get the interface to talk to the plug-in through.
+    /// AudioServerPlugIns are required to support the IUnknown interface and the
+    /// AudioServerPlugInDriverInterface. As it happens, all interfaces must also provide the
+    /// IUnknown interface, so we can always just return the single interface we made with
+    /// gAudioServerPlugInDriverInterfacePtr regardless of which one is asked for.
     unsafe extern "C" fn query_interface(
         driver: *mut c_void,
         in_uuid: REFIID,
@@ -75,21 +75,21 @@ pub trait RawAudioServerPlugInDriverInterface {
     unsafe extern "C" fn retain(driver: *mut c_void) -> ULONG;
     unsafe extern "C" fn release(driver: *mut c_void) -> ULONG;
 
-    ///	The job of this method is, as the name implies, to get the driver initialized. One specific
-    ///	thing that needs to be done is to store the AudioServerPlugInHostRef so that it can be used
-    ///	later. Note that when this call returns, the HAL will scan the various lists the driver
-    ///	maintains (such as the device list) to get the inital set of objects the driver is
-    ///	publishing. So, there is no need to notifiy the HAL about any objects created as part of the
-    ///	execution of this method.
+    /// The job of this method is, as the name implies, to get the driver initialized. One specific
+    /// thing that needs to be done is to store the AudioServerPlugInHostRef so that it can be used
+    /// later. Note that when this call returns, the HAL will scan the various lists the driver
+    /// maintains (such as the device list) to get the inital set of objects the driver is
+    /// publishing. So, there is no need to notifiy the HAL about any objects created as part of the
+    /// execution of this method.
     unsafe extern "C" fn initialize(
         driver: AudioServerPlugInDriverRef,
         host: AudioServerPlugInHostRef,
     ) -> OSStatus;
 
-    ///	This method is used to tell a driver that implements the Transport Manager semantics to
-    ///	create an AudioEndpointDevice from a set of AudioEndpoints. Since this driver is not a
-    ///	Transport Manager, we just check the arguments and return
-    ///	kAudioHardwareUnsupportedOperationError.
+    /// This method is used to tell a driver that implements the Transport Manager semantics to
+    /// create an AudioEndpointDevice from a set of AudioEndpoints. Since this driver is not a
+    /// Transport Manager, we just check the arguments and return
+    /// kAudioHardwareUnsupportedOperationError.
     unsafe extern "C" fn create_device(
         driver: AudioServerPlugInDriverRef,
         desc: CFDictionaryRef,
@@ -97,42 +97,42 @@ pub trait RawAudioServerPlugInDriverInterface {
         device_object_id: *mut AudioObjectID,
     ) -> OSStatus;
 
-    ///	This method is used to tell a driver that implements the Transport Manager semantics to
-    ///	destroy an AudioEndpointDevice. Since this driver is not a Transport Manager, we just check
-    ///	the arguments and return kAudioHardwareUnsupportedOperationError.
+    /// This method is used to tell a driver that implements the Transport Manager semantics to
+    /// destroy an AudioEndpointDevice. Since this driver is not a Transport Manager, we just check
+    /// the arguments and return kAudioHardwareUnsupportedOperationError.
     unsafe extern "C" fn destroy_device(
         driver: AudioServerPlugInDriverRef,
         device_id: AudioObjectID,
     ) -> OSStatus;
 
-    ///	This method is used to inform the driver about a new client that is using the given device.
-    ///	This allows the device to act differently depending on who the client is. This driver does
-    ///	not need to track the clients using the device, so we just check the arguments and return
-    ///	successfully.
+    /// This method is used to inform the driver about a new client that is using the given device.
+    /// This allows the device to act differently depending on who the client is. This driver does
+    /// not need to track the clients using the device, so we just check the arguments and return
+    /// successfully.
     unsafe extern "C" fn add_device_client(
         driver: AudioServerPlugInDriverRef,
         device_id: AudioObjectID,
         client_info: *const AudioServerPlugInClientInfo,
     ) -> OSStatus;
 
-    ///	This method is used to inform the driver about a client that is no longer using the given
-    ///	device. This driver does not track clients, so we just check the arguments and return
-    ///	successfully.
+    /// This method is used to inform the driver about a client that is no longer using the given
+    /// device. This driver does not track clients, so we just check the arguments and return
+    /// successfully.
     unsafe extern "C" fn remove_device_client(
         driver: AudioServerPlugInDriverRef,
         device_id: AudioObjectID,
         client_info: *const AudioServerPlugInClientInfo,
     ) -> OSStatus;
 
-    ///	This method is called to tell the device that it can perform the configuation change that it
-    ///	had requested via a call to the host method, RequestDeviceConfigurationChange(). The
-    ///	arguments, inChangeAction and inChangeInfo are the same as what was passed to
-    ///	RequestDeviceConfigurationChange().
+    /// This method is called to tell the device that it can perform the configuation change that it
+    /// had requested via a call to the host method, RequestDeviceConfigurationChange(). The
+    /// arguments, inChangeAction and inChangeInfo are the same as what was passed to
+    /// RequestDeviceConfigurationChange().
     ///
-    ///	The HAL guarantees that IO will be stopped while this method is in progress. The HAL will
-    ///	also handle figuring out exactly what changed for the non-control related properties. This
-    ///	means that the only notifications that would need to be sent here would be for either
-    ///	custom properties the HAL doesn't know about or for controls.
+    /// The HAL guarantees that IO will be stopped while this method is in progress. The HAL will
+    /// also handle figuring out exactly what changed for the non-control related properties. This
+    /// means that the only notifications that would need to be sent here would be for either
+    /// custom properties the HAL doesn't know about or for controls.
     unsafe extern "C" fn perform_device_configuration_change(
         driver: AudioServerPlugInDriverRef,
         device_id: AudioObjectID,
@@ -140,17 +140,17 @@ pub trait RawAudioServerPlugInDriverInterface {
         change_info: *mut c_void,
     ) -> OSStatus;
 
-    ///	This method is called to tell the driver that a request for a config change has been denied.
-    ///	This provides the driver an opportunity to clean up any state associated with the request.
-    ///	For this driver, an aborted config change requires no action. So we just check the arguments
-    ///	and return
+    /// This method is called to tell the driver that a request for a config change has been denied.
+    /// This provides the driver an opportunity to clean up any state associated with the request.
+    /// For this driver, an aborted config change requires no action. So we just check the arguments
+    /// and return
     unsafe extern "C" fn abort_device_configuration_change(
         driver: AudioServerPlugInDriverRef,
         device_id: AudioObjectID,
         action: u64,
         change_info: *mut c_void,
     ) -> OSStatus;
-    ///	This method returns whether or not the given object has the given property.
+    /// This method returns whether or not the given object has the given property.
     unsafe extern "C" fn has_property(
         driver: AudioServerPlugInDriverRef,
         object_id: AudioObjectID,
@@ -158,8 +158,8 @@ pub trait RawAudioServerPlugInDriverInterface {
         property_address: *const AudioObjectPropertyAddress,
     ) -> u8;
 
-    ///	This method returns whether or not the given property on the object can have its value
-    ///	changed.
+    /// This method returns whether or not the given property on the object can have its value
+    /// changed.
     unsafe extern "C" fn is_property_settable(
         driver: AudioServerPlugInDriverRef,
         object_id: AudioObjectID,
@@ -274,13 +274,15 @@ pub struct PluginHostInterface<Implementation: ?Sized + 'static> {
 }
 
 impl<Implementation: AudioServerPluginDriverInterface> PluginHostInterface<Implementation> {
+    /// # Safety
+    /// inner must point to an initialized CA host interface struct
     pub unsafe fn new(inner: *const AudioServerPlugInHostInterface) -> Option<Self> {
         Some(Self {
             inner: NonNull::new(inner.cast_mut())?,
             _boo: PhantomData,
         })
     }
-    /// This method informs the Host when the state of an plug-in's object changes.
+    /// This method informs the Host when the state of a plug-in's object changes.
     ///
     /// Note that for Device objects, this method is only used for state changes
     /// that don't affect IO or the structure of the device.
@@ -289,13 +291,13 @@ impl<Implementation: AudioServerPluginDriverInterface> PluginHostInterface<Imple
         in_object_id: AudioObjectID,
         properties: &[AudioObjectPropertyAddress],
     ) -> crate::os_err::OSStatus {
-        //SAFETY: pointer is non-null and the pointee is 'static (CoreAudio HAL outlives plugins)
+        // Safety: pointer is non-null and the pointee is 'static (CoreAudio HAL outlives plugins)
         let Some(f) = (unsafe { ptr::read(self.inner.as_ptr().cast_const()).PropertiesChanged })
         else {
             return Err(OSStatusError::HW_ILLEGAL_OPERATION_ERR);
         };
 
-        //SAFETY: all objects passed in are guaranteed to be correctly initialized by core_foundation
+        // Safety: all objects passed in are guaranteed to be correctly initialized by core_foundation
         result_from_err_code(unsafe {
             (f)(
                 self.inner.as_ptr().cast_const(),
@@ -309,22 +311,22 @@ impl<Implementation: AudioServerPluginDriverInterface> PluginHostInterface<Imple
         })
     }
     /// This method will fetch the data associated with the named storage key.
-    pub fn copy_from_storage(&self, in_key: CFStringRef) -> OSResult<CFPropertyList> {
-        //SAFETY: see propertes_changed
+    pub fn copy_from_storage(&self, in_key: CFString) -> OSResult<CFPropertyList> {
+        // Safety: see propertes_changed
         let Some(f) = (unsafe { ptr::read(self.inner.as_ptr().cast_const()).CopyFromStorage })
         else {
             return Err(OSStatusError::HW_ILLEGAL_OPERATION_ERR);
         };
-        let mut plistref = ptr::null();
+        let mut plistref: *const c_void = ptr::null();
         //SAFETY: all objects passed in are guaranteed to be correctly initialized by core_foundation
         result_from_err_code(unsafe {
             (f)(
                 self.inner.as_ptr().cast_const(),
-                in_key.cast(),
+                in_key.as_CFTypeRef().cast(),
                 &mut plistref as *mut *const c_void,
             )
         })?;
-        if plistref == ptr::null() {
+        if plistref.is_null() {
             return Err(OSStatusError::HW_UNSPECIFIED_ERR);
         }
         //SAFETY: pointer is checked to be non-null, wrapped with create rule since "user is responsible for releasing the return object"
@@ -333,7 +335,7 @@ impl<Implementation: AudioServerPluginDriverInterface> PluginHostInterface<Imple
     /// This method will associate the given data with the named storage key,
     /// replacing any existing data.
     ///
-    /// Note that any data stored this way is persists beyond the life span of the
+    /// Note that any data stored this way is persisted beyond the life span of the
     /// Host including across rebooting.
     pub fn write_to_storage(
         &self,
@@ -358,7 +360,7 @@ impl<Implementation: AudioServerPluginDriverInterface> PluginHostInterface<Imple
     }
     /// This method will remove the given key and any associated data from storage.
     pub fn delete_from_storage(&self, in_key: CFString) -> crate::os_err::OSStatus {
-        //SAFETY: see propertes_changed
+        // Safety: see propertes_changed
         let Some(f) = (unsafe { ptr::read(self.inner.as_ptr().cast_const()).DeleteFromStorage })
         else {
             return Err(OSStatusError::HW_ILLEGAL_OPERATION_ERR);
@@ -371,13 +373,15 @@ impl<Implementation: AudioServerPluginDriverInterface> PluginHostInterface<Imple
             )
         })
     }
+    /// # Safety
+    /// May result in a dereference of in_change_info
     pub unsafe fn request_device_configuration_change(
         &self,
         in_device_object_id: AudioObjectID,
         in_change_action: u64,
         in_change_info: *mut c_void,
     ) -> crate::os_err::OSStatus {
-        //SAFETY: see propertes_changed
+        // Safety: see propertes_changed
         let Some(f) = (unsafe {
             ptr::read(self.inner.as_ptr().cast_const()).RequestDeviceConfigurationChange
         }) else {
