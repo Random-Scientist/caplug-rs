@@ -91,7 +91,7 @@ where
             ) == 1
         } {
             // Init and allocate driver
-            let driver_state = Implementation::create(alloc.cast());
+            let state = Implementation::create(alloc.cast());
 
             // explicitly borrow IMPLEMENTATION for 'static (to make it clear that it gets promoted to a static)
             let impl_borrow: &'static AudioServerPlugInDriverInterface = &Self::IMPLEMENTATION;
@@ -100,7 +100,7 @@ where
             Box::<_>::into_raw(Box::new(PluginDriverImplementation {
                 implementation: impl_borrow as *const AudioServerPlugInDriverInterface,
                 refcount: AtomicU32::new(1),
-                state: driver_state,
+                state,
             }))
             .cast()
         } else {
@@ -148,7 +148,7 @@ where
     }
 
     unsafe extern "C" fn retain(driver: *mut std::ffi::c_void) -> coreaudio_sys::ULONG {
-        let Some(r) = driver.cast::<PluginDriverImplementation<Self>>().as_ref() else {
+        let Some(r) = (unsafe { driver.cast::<PluginDriverImplementation<Self>>().as_ref() }) else {
             //0 refcount for null implementation
             error!("attempted to retain null implementation");
             return 0;
@@ -167,7 +167,7 @@ where
 
     unsafe extern "C" fn release(driver: *mut std::ffi::c_void) -> coreaudio_sys::ULONG {
         // We are not actually supposed to deallocate anything when this reaches 0 for whatever reason
-        let Some(r) = driver.cast::<PluginDriverImplementation<Self>>().as_ref() else {
+        let Some(r) = (unsafe { driver.cast::<PluginDriverImplementation<Self>>().as_ref() }) else {
             warn!("attempted to release null implementation");
             //0 refcount for null implementation
             return 0;
@@ -188,10 +188,10 @@ where
         host: coreaudio_sys::AudioServerPlugInHostRef,
     ) -> coreaudio_sys::OSStatus {
         info!("Initialize called: {}", Self::NAME);
-        let Some(hostref) = PluginHostInterface::new(host) else {
+        let Some(hostref) = (unsafe { PluginHostInterface::new(host) }) else {
             return kAudioHardwareIllegalOperationError as i32;
         };
-        let implementation = validate_impl_ref!(driver);
+        let implementation = unsafe { validate_impl_ref!(driver) };
         result_to_err_code(implementation.state.init(hostref))
     }
 

@@ -13,7 +13,7 @@ use polonius_the_crab::{exit_polonius, polonius, polonius_return};
 pub trait AudioObject: HasProperties {
     fn subobjects(&self) -> &[&dyn AudioObject];
     fn subobjects_mut(&mut self) -> &mut [&mut dyn AudioObject];
-
+    fn id(&self) -> AudioObjectID;
     fn get_property(&self, sel: PropertySelector) -> Option<&dyn RawProperty> {
         if let Some(prop) = self.get_object_property(sel) {
             return Some(prop);
@@ -53,11 +53,11 @@ pub trait HasProperties {
 
 #[derive(Debug)]
 pub struct AudioObjectBase {
-    pub base_class: Prop<AudioClassID, kAudioObjectPropertyBaseClass, false>,
-    pub class: Prop<AudioClassID, kAudioObjectPropertyClass, false>,
-    pub owner: Prop<AudioObjectID, kAudioObjectPropertyOwner, false>,
-    pub owned_objects: ArrayProp<AudioObjectID, kAudioObjectPropertyOwnedObjects, false>,
-    pub name: Prop<CFString, kAudioObjectPropertyName, false>,
+    pub base_class: Prop<AudioClassID, kAudioObjectPropertyBaseClass>,
+    pub class: Prop<AudioClassID, kAudioObjectPropertyClass>,
+    pub owner: Prop<AudioObjectID, kAudioObjectPropertyOwner>,
+    pub owned_objects: ArrayProp<AudioObjectID, kAudioObjectPropertyOwnedObjects>,
+    pub name: Prop<CFString, kAudioObjectPropertyName>,
 }
 #[allow(non_upper_case_globals)]
 impl HasProperties for AudioObjectBase {

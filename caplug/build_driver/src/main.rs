@@ -122,7 +122,8 @@ fn main() {
 }
 
 fn make_info_plist(package_name: &str, package_version: &str) -> String {
-    let uuid = Uuid::new_v3(&Uuid::NAMESPACE_URL, package_name.as_bytes());
+    let uuid_ = Uuid::new_v3(&Uuid::NAMESPACE_URL, package_name.as_bytes());
+    let uuid = &uuid_;
     format!(
         r##"
 <?xml version="1.0" encoding="UTF-8"?>
@@ -132,17 +133,17 @@ fn make_info_plist(package_name: &str, package_version: &str) -> String {
 	<key>CFBundleDevelopmentRegion</key>
 	<string>English</string>
 	<key>CFBundleExecutable</key>
-	<string>{}</string>
+	<string>{package_name}</string>
 	<key>CFBundleIdentifier</key>
-	<string>com.rustaudio.{}</string>
+	<string>com.rustaudio.{package_name}</string>
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
 	<key>CFBundleName</key>
-	<string>{}</string>
+	<string>{package_name}</string>
 	<key>CFBundlePackageType</key>
 	<string>BNDL</string>
 	<key>CFBundleShortVersionString</key>
-	<string>{}</string>
+	<string>{package_version}</string>
 	<key>CFBundleSignature</key>
 	<string>????</string>
 	<key>CFBundleSupportedPlatforms</key>
@@ -153,14 +154,14 @@ fn make_info_plist(package_name: &str, package_version: &str) -> String {
 	<string>1</string>
 	<key>CFPlugInFactories</key>
 	<dict>
-		<key>{}</key>
-		<string>__create_driver</string>
+		<key>{uuid}</key>
+		<string>cahal_rs_create_driver</string>
 	</dict>
 	<key>CFPlugInTypes</key>
 	<dict>
 		<key>443ABAB8-E7B3-491A-B985-BEB9187030DB</key>
 		<array>
-			<string>{}</string>
+			<string>{uuid}</string>
 		</array>
 	</dict>
 </dict>

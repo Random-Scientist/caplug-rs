@@ -77,7 +77,7 @@ macro_rules! ret_assert {
 
 #[derive(Debug, Clone)]
 /// A convenient wrapper for Copy types that implements [RawProperty] for them, given the correct selector and mutability in the const generic parameters
-pub struct Prop<T, const SEL: u32, const MUTABLE_PROP: bool>(pub T);
+pub struct Prop<T, const SEL: u32, const MUTABLE_PROP: bool = false>(pub T);
 
 impl<T, const SEL: u32, const MUTABLE_PROP: bool> Prop<T, SEL, MUTABLE_PROP> {
     const SIZE: u32 = const {
@@ -118,7 +118,7 @@ impl<T: Clone + 'static, const SEL: u32, const MUTABLE_PROP: bool> RawProperty
         );
         ret_assert!(self.is_mut());
 
-        let val = ptr::read(data as *const T);
+        let val = unsafe { ptr::read(data as *const T) };
 
         self.0 = val;
         Ok(())
@@ -140,7 +140,7 @@ impl<T: Clone + 'static, const SEL: u32, const MUTABLE_PROP: bool> RawProperty
         );
         let data_out = data_out as *mut T;
         ret_assert!(data_out.is_aligned(), OSStatusError::HW_BAD_OBJECT_ERR);
-        ptr::write(data_out, self.0.clone());
+        unsafe { ptr::write(data_out, self.0.clone()) };
         Ok(())
     }
 
@@ -155,7 +155,7 @@ impl<T: Clone + 'static, const SEL: u32, const MUTABLE_PROP: bool> RawProperty
 
 #[derive(Debug, Clone)]
 /// A convenient wrapper for an array of Copy types as a [RawProperty]
-pub struct ArrayProp<T, const SEL: u32, const MUTABLE_PROP: bool> {
+pub struct ArrayProp<T, const SEL: u32, const MUTABLE_PROP: bool = false> {
     props: Vec<T>,
 }
 impl<T, const SEL: u32, const MUTABLE_PROP: bool> Deref for ArrayProp<T, SEL, MUTABLE_PROP> {
@@ -223,7 +223,7 @@ impl<T: Copy + 'static, const SEL: u32, const MUTABLE_PROP: bool> RawProperty
         ret_assert!(data.is_aligned(), OSStatusError::HW_BAD_OBJECT_ERR);
         ret_assert!(self.is_mut());
 
-        let r = slice::from_raw_parts(data, (data_size / Self::ITEM_SIZE) as usize);
+        let r = unsafe { slice::from_raw_parts(data, (data_size / Self::ITEM_SIZE) as usize) };
         self.props.clear();
         self.props.extend_from_slice(r);
         Ok(())
@@ -246,20 +246,20 @@ impl<T: Copy + 'static, const SEL: u32, const MUTABLE_PROP: bool> RawProperty
         let data_out = data_out as *mut T;
         ret_assert!(data_out.is_aligned(), OSStatusError::HW_BAD_OBJECT_ERR);
 
-        let s = slice::from_raw_parts_mut(
-            data_out as *mut MaybeUninit<T>,
-            (out_alloc_size / Self::ITEM_SIZE) as usize,
-        );
+        let s = unsafe { slice::from_raw_parts_mut(
+                    data_out as *mut MaybeUninit<T>,
+                    (out_alloc_size / Self::ITEM_SIZE) as usize,
+                ) };
         let to_copy = s.len().min(self.props.len());
         let slice = &self.props[0..s.len().min(self.props.len())];
         let slice =
             unsafe { slice::from_raw_parts(slice.as_ptr() as *const MaybeUninit<T>, slice.len()) };
 
         s.copy_from_slice(slice);
-
-        *data_len_out = (to_copy * Self::ITEM_SIZE as usize)
+        
+        unsafe { *data_len_out = (to_copy * Self::ITEM_SIZE as usize)
             .try_into()
-            .replace_err(OSStatusError::HW_BAD_PROPERTY_SIZE_ERR)?;
+            .replace_err(OSStatusError::HW_BAD_PROPERTY_SIZE_ERR)? };
         Ok(())
     }
 }

@@ -10,7 +10,12 @@ use core_foundation::{
     string::{CFString, CFStringRef},
 };
 use coreaudio_sys::{
-    pid_t, AudioObjectID, AudioObjectPropertyAddress, AudioServerPlugInClientInfo,
+    kAudioServerPlugInIOOperationConvertInput, kAudioServerPlugInIOOperationConvertMix,
+    kAudioServerPlugInIOOperationCycle, kAudioServerPlugInIOOperationMixOutput,
+    kAudioServerPlugInIOOperationProcessInput, kAudioServerPlugInIOOperationProcessMix,
+    kAudioServerPlugInIOOperationProcessOutput, kAudioServerPlugInIOOperationReadInput,
+    kAudioServerPlugInIOOperationThread, kAudioServerPlugInIOOperationWriteMix, pid_t,
+    AudioObjectID, AudioObjectPropertyAddress, AudioServerPlugInClientInfo,
     AudioServerPlugInDriverInterface, AudioServerPlugInDriverRef, AudioServerPlugInHostInterface,
     AudioServerPlugInHostRef, AudioServerPlugInIOCycleInfo, CFAllocatorRef, CFDictionaryRef,
     OSStatus, HRESULT, LPVOID, REFIID, ULONG,
@@ -262,7 +267,7 @@ pub trait RawAudioServerPlugInDriverInterface {
     ) -> OSStatus;
 }
 
-// This value is not mutated (provided by a static implementation of the plugin host), and is safe to send between threads and access without syncronization
+// This value is not mutated (provided by a static implementation in the plugin host), and is safe to send between threads and access without syncronization
 unsafe impl<T: AudioServerPluginDriverInterface> Sync for PluginHostInterface<T> {}
 unsafe impl<T: AudioServerPluginDriverInterface> Send for PluginHostInterface<T> {}
 //Safe to duplicate this structure since the internal pointer has shared/immutable provenance
@@ -329,7 +334,7 @@ impl<Implementation: AudioServerPluginDriverInterface> PluginHostInterface<Imple
         if plistref.is_null() {
             return Err(OSStatusError::HW_UNSPECIFIED_ERR);
         }
-        //SAFETY: pointer is checked to be non-null, wrapped with create rule since "user is responsible for releasing the return object"
+        // Safety: pointer is checked to be non-null, wrapped with create rule since "user is responsible for releasing the return object"
         Ok(unsafe { CFPropertyList::wrap_under_create_rule(plistref) })
     }
     /// This method will associate the given data with the named storage key,
@@ -342,13 +347,13 @@ impl<Implementation: AudioServerPluginDriverInterface> PluginHostInterface<Imple
         in_key: CFString,
         in_data: CFPropertyList,
     ) -> crate::os_err::OSStatus {
-        //SAFETY: see propertes_changed
+        // Safety: see propertes_changed
         let Some(f) = (unsafe { ptr::read(self.inner.as_ptr().cast_const()).WriteToStorage })
         else {
             return Err(OSStatusError::HW_ILLEGAL_OPERATION_ERR);
         };
         result_from_err_code(
-            //SAFETY: all objects passed in are guaranteed to be correctly initialized by core_foundation
+            // Safety: all objects passed in are guaranteed to be correctly initialized by core_foundation
             unsafe {
                 (f)(
                     self.inner.as_ptr().cast_const(),
@@ -361,13 +366,13 @@ impl<Implementation: AudioServerPluginDriverInterface> PluginHostInterface<Imple
     /// This method will remove the given key and any associated data from storage.
     pub fn delete_from_storage(&self, in_key: CFString) -> crate::os_err::OSStatus {
         // Safety: see propertes_changed
-        let Some(f) = (unsafe { ptr::read(self.inner.as_ptr().cast_const()).DeleteFromStorage })
+        let Some(func) = (unsafe { ptr::read(self.inner.as_ptr().cast_const()).DeleteFromStorage })
         else {
             return Err(OSStatusError::HW_ILLEGAL_OPERATION_ERR);
         };
         result_from_err_code(unsafe {
-            //SAFETY: all objects passed in are guaranteed to be correctly initialized by core_foundation
-            (f)(
+            // Safety: all objects passed in are guaranteed to be correctly initialized by core_foundation
+            (func)(
                 self.inner.as_ptr().cast_const(),
                 in_key.as_CFTypeRef().cast(),
             )
@@ -382,18 +387,18 @@ impl<Implementation: AudioServerPluginDriverInterface> PluginHostInterface<Imple
         in_change_info: *mut c_void,
     ) -> crate::os_err::OSStatus {
         // Safety: see propertes_changed
-        let Some(f) = (unsafe {
+        let Some(func) = (unsafe {
             ptr::read(self.inner.as_ptr().cast_const()).RequestDeviceConfigurationChange
         }) else {
             return Err(OSStatusError::HW_ILLEGAL_OPERATION_ERR);
         };
 
-        result_from_err_code((f)(
+        result_from_err_code(unsafe { (func)(
             self.inner.as_ptr().cast_const(),
             in_device_object_id,
             in_change_action,
             in_change_info,
-        ))
+        ) })
     }
     /// request a device configuration change with boxed change info
     pub fn request_boxed_device_configuration_change(
@@ -403,8 +408,8 @@ impl<Implementation: AudioServerPluginDriverInterface> PluginHostInterface<Imple
         in_change_info: Option<Box<Implementation::DeviceConfigurationChangeInfo>>,
     ) -> crate::os_err::OSStatus {
         let mut ptr = ptr::null_mut();
-        if let Some(p) = in_change_info.map(Box::into_raw) {
-            ptr = p;
+        if let Some(change_info) = in_change_info.map(Box::into_raw) {
+            ptr = change_info;
         };
         //SAFETY: pointer is either an owning pointer to a correctly initialized `Box<Implementation::DeviceConfigurationChangeInfo>` or null
         unsafe {
@@ -415,4 +420,57 @@ impl<Implementation: AudioServerPluginDriverInterface> PluginHostInterface<Imple
             )
         }
     }
+}
+// TODO link to safe do_io_operation function in doc
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(u32)]
+enum AudioServerPlugInIoOperation {
+    /// This operation marks the beginning and the ending of the IO thread. Note
+    /// that [do_io_operation]() will never be called with this ID.
+    Thread = kAudioServerPlugInIOOperationThread,
+
+    /// This operation marks the beginning and ending of each IO cycle. Note that
+    /// DoIOOperation() will never be called with this ID.
+    Cycle = kAudioServerPlugInIOOperationCycle,
+
+    /// This operation transfers the input data from the device's ring buffer to the
+    /// provided buffer in the stream's native format. Note that this operation
+    /// always happens in-place in the main buffer passed to DoIOOperation(). It is
+    /// required that this operation be implemented if the AudioDevice has input
+    /// streams.
+    ReadInput = kAudioServerPlugInIOOperationReadInput,
+
+    /// This operation converts the input data from its native format to the
+    /// canonical format.
+    ConvertInput = kAudioServerPlugInIOOperationConvertInput,
+
+    /// This operation performs arbitrary signal processing on the input data in the
+    // canonical format.
+    ProcessInput = kAudioServerPlugInIOOperationProcessInput,
+
+    /// This operation performs arbitrary signal processing on the output data in
+    /// the canonical format.
+    ProcessOutput = kAudioServerPlugInIOOperationProcessOutput,
+
+    /// This operation mixes the output data into the device's ring buffer. Note
+    /// that if a plug-in implements this operation, no further output operations
+    /// will occur for that cycle. It is assumed that the device handles everything
+    /// from there down including preparing the data for consumption by the
+    /// hardware. Note also that this operation always happens in-place in the main
+    /// buffer passed to DoIOOperation().
+    MixOutput = kAudioServerPlugInIOOperationMixOutput,
+
+    /// This operation processes the full mix of all clients' data in the canonical
+    /// format.
+    ProcessMix = kAudioServerPlugInIOOperationProcessMix,
+
+    /// This operation converts the fully mixed data from the canonical format to
+    /// the device's native format.
+    ConvertMix = kAudioServerPlugInIOOperationConvertMix,
+
+    /// This operation puts the data into the device's ring buffer for consumption
+    /// of the hardware. Note that this operation always happens in-place in the
+    /// main buffer passed to DoIOOperation(). It is required that this operation be
+    /// implemented if the AudioDevice has output streams.
+    WriteMix = kAudioServerPlugInIOOperationWriteMix,
 }
