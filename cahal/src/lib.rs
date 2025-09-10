@@ -102,7 +102,7 @@ pub mod os_err {
 #[macro_export]
 macro_rules! entry_point {
     ($implementation_type:ty) => {
-        #[no_mangle]
+        #[unsafe(no_mangle)]
         pub unsafe extern "C" fn cahal_rs_create_driver(alloc: ::cahal::base::CFAllocatorRef, requested_uuid: ::cahal::base::CFUUIDRef) -> *mut ::std::ffi::c_void {
             <$implementation_type as ::cahal::raw_plugin_driver_interface::RawAudioServerPlugInDriverInterface>::create(alloc, requested_uuid)
         }

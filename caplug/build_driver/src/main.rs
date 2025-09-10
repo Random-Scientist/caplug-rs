@@ -166,7 +166,6 @@ fn make_info_plist(package_name: &str, package_version: &str) -> String {
 	</dict>
 </dict>
 </plist>"##,
-        package_name, package_name, package_name, package_version, &uuid, &uuid
     )
 }
 
